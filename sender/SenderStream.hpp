@@ -11,7 +11,7 @@
 namespace sender {
     struct SenderCtx {
         size_t bytes_sent = 0;
-        size_t limit = (1024 * 1024 * 1024) / 16;
+        size_t limit = (1024 * 1024 * 1024) / 8;
     };
 
     class SenderStream : public common::Stream {
