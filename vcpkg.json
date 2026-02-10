@@ -1,5 +1,5 @@
 {
-  "name" : "thruflux-c-",
+  "name" : "thruflux",
   "version-string" : "1.0.0",
   "builtin-baseline" : "fb87e2bb3fe69e16c224989acb5a61349166c782",
   "dependencies" : [ {
