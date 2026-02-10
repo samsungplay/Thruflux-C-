@@ -1,0 +1,76 @@
+#include "SenderConfig.hpp"
+#include <ixwebsocket/IXWebSocket.h>
+#include <ixwebsocket/IXNetSystem.h>
+#include <spdlog/spdlog.h>
+
+#include "SenderSocketHandler.hpp"
+#include "../common/Utils.hpp"
+#include <latch>
+#include <boost/algorithm/string.hpp>
+
+#include "SenderStream.hpp"
+
+int main(const int argc, char **argv) {
+
+    sender::SenderConfig::initialize(argc, argv);
+
+
+    std::vector<std::string> rawStunUrls;
+    boost::split(rawStunUrls, sender::SenderConfig::stunServers, boost::is_any_of(","), boost::token_compress_on);
+
+    for (const auto &rawStunUrl: rawStunUrls) {
+        if (auto stunServer = common::Utils::toStunServer(rawStunUrl); stunServer.has_value()) {
+            common::IceHandler::addStunServer(stunServer.value());
+        }
+    }
+
+    std::vector<std::string> rawTurnUrls;
+    boost::split(rawTurnUrls, sender::SenderConfig::turnServers, boost::is_any_of(","), boost::token_compress_on);
+
+    for (const auto &rawTurnUrl: rawTurnUrls) {
+        if (auto turnServer = common::Utils::toTurnServer(rawTurnUrl); turnServer.has_value()) {
+            common::IceHandler::addTurnServer(turnServer.value());
+        }
+    }
+
+
+    ix::initNetSystem();
+    ix::WebSocket socketClient;
+    socketClient.disableAutomaticReconnection();
+    std::latch clientDone{1};
+    common::IceHandler::initialize();
+
+    sender::SenderStream::initialize();
+
+
+    socketClient.setUrl(common::Utils::toWebSocketURL(sender::SenderConfig::serverUrl));
+    ix::WebSocketHttpHeaders headers;
+    headers["x-role"] = "sender";
+    headers["x-id"] = common::Utils::generateNanoId();
+    socketClient.setExtraHeaders(headers);
+    socketClient.setPingInterval(30);
+
+    socketClient.setOnMessageCallback([&socketClient, &clientDone](const ix::WebSocketMessagePtr &msg) {
+        if (msg->type == ix::WebSocketMessageType::Open) {
+            sender::SenderSocketHandler::onConnect(socketClient);
+        } else if (msg->type == ix::WebSocketMessageType::Message) {
+            sender::SenderSocketHandler::onMessage(socketClient, msg->str);
+        } else if (msg->type == ix::WebSocketMessageType::Close) {
+            sender::SenderSocketHandler::onClose(socketClient, clientDone, msg->closeInfo.reason);
+        }
+    });
+
+    spdlog::info("Connecting to signaling server at {}...", sender::SenderConfig::serverUrl);
+
+    socketClient.start();
+
+    clientDone.wait();
+
+    socketClient.stop();
+
+    common::IceHandler::destroy();
+
+    sender::SenderStream::dispose();
+
+    ix::uninitNetSystem();
+}

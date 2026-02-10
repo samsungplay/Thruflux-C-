@@ -1,0 +1,74 @@
+cmake_minimum_required(VERSION 4.1)
+project(Thruflux_C__)
+
+set(CMAKE_CXX_STANDARD 20)
+
+find_package(CLI11 CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+find_package(unofficial-uwebsockets CONFIG REQUIRED)
+find_package(OpenSSL REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(ixwebsocket CONFIG REQUIRED)
+find_package(Boost REQUIRED COMPONENTS url)
+find_package(PkgConfig REQUIRED)
+find_package(lsquic CONFIG REQUIRED)
+pkg_check_modules(NICE REQUIRED IMPORTED_TARGET nice)
+
+
+set(COMMON_SOURCES
+        common/Utils.hpp
+        common/Payloads.hpp
+        common/Types.hpp
+        common/TTLCache.hpp
+        common/IceHandler.hpp
+        common/Worker.hpp
+)
+
+add_executable(ThrufluxServer
+        server/ServerEntryPoint.cpp
+        server/ServerConfig.hpp
+        server/ServerSocketHandler.hpp
+        server/TransferSession.hpp
+        server/TransferSessionStore.hpp
+        server/SessionTracker.hpp
+        ${COMMON_SOURCES}
+)
+
+add_executable(ThrufluxSender
+        sender/SenderEntryPoint.cpp
+        sender/SenderConfig.hpp
+        sender/SenderSocketHandler.hpp
+        sender/SenderStateHolder.hpp
+        sender/SenderFileHandler.hpp
+        ${COMMON_SOURCES}
+        sender/SenderStream.hpp
+        common/Stream.hpp
+)
+
+add_executable(ThrufluxReceiver
+        receiver/ReceiverConfig.hpp
+        ${COMMON_SOURCES}
+        receiver/ReceiverEntryPoint.cpp
+        receiver/ReceiverSocketHandler.hpp
+        receiver/ReceiverStream.hpp
+        common/Stream.hpp
+)
+
+set(SHARED_LIBS
+        CLI11::CLI11
+        spdlog::spdlog
+        nlohmann_json::nlohmann_json
+        Boost::url
+        Boost::boost
+        OpenSSL::Crypto
+        PkgConfig::NICE
+)
+
+set(SENDER_RECEIVER_SHARED_LIBS
+        ixwebsocket::ixwebsocket
+        lsquic::lsquic
+)
+
+target_link_libraries(ThrufluxServer PRIVATE ${SHARED_LIBS} unofficial::uwebsockets::uwebsockets)
+target_link_libraries(ThrufluxSender PRIVATE ${SHARED_LIBS} ${SENDER_RECEIVER_SHARED_LIBS})
+target_link_libraries(ThrufluxReceiver PRIVATE ${SHARED_LIBS} ${SENDER_RECEIVER_SHARED_LIBS})

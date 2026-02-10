@@ -1,0 +1,197 @@
+#pragma once
+#include <nice.h>
+#include <lsquic.h>
+#include <openssl/base.h>
+#include <openssl/ssl.h>
+#include <spdlog/spdlog.h>
+#include <openssl/x509.h>
+#include <openssl/pem.h>
+
+#include "ReceiverConfig.hpp"
+#include "../common/Stream.hpp"
+
+
+namespace receiver {
+    class ReceiverStream : public common::Stream {
+        static int alpnSelectCallback(SSL *ssl, const unsigned char **out, unsigned char *outlen,
+                                      const unsigned char *in, unsigned int inlen, void *arg) {
+            *out = reinterpret_cast<const unsigned char *>("thruflux");
+            *outlen = 8;
+
+            return SSL_TLSEXT_ERR_OK;
+        }
+
+
+        static void loadInMemoryCertificate(SSL_CTX *ctx) {
+            EVP_PKEY_CTX *pkt = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr);
+            if (!pkt) throw std::runtime_error("Failed to create keygen ctx");
+
+            if (EVP_PKEY_keygen_init(pkt) <= 0) throw std::runtime_error("Keygen init failed");
+
+            if (EVP_PKEY_CTX_set_rsa_keygen_bits(pkt, 2048) <= 0) throw std::runtime_error("RSA bit set failed");
+
+            EVP_PKEY *pkey = nullptr;
+            if (EVP_PKEY_keygen(pkt, &pkey) <= 0) throw std::runtime_error("Key generation failed");
+
+            X509 *x509 = X509_new();
+            X509_set_version(x509, 2);
+            ASN1_INTEGER_set(X509_get_serialNumber(x509), 1);
+            X509_gmtime_adj(X509_get_notBefore(x509), 0);
+            X509_gmtime_adj(X509_get_notAfter(x509), 31536000L); // 1 year
+
+            X509_set_pubkey(x509, pkey);
+            X509_NAME *name = X509_get_subject_name(x509);
+            X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (unsigned char *) "thruflux.local", -1, -1, 0);
+            X509_set_issuer_name(x509, name);
+
+            if (!X509_sign(x509, pkey, EVP_sha256())) throw std::runtime_error("Signing failed");
+
+            if (SSL_CTX_use_certificate(ctx, x509) <= 0) throw std::runtime_error("Cert use failed");
+            if (SSL_CTX_use_PrivateKey(ctx, pkey) <= 0) throw std::runtime_error("Key use failed");
+
+            EVP_PKEY_CTX_free(pkt);
+            X509_free(x509);
+            EVP_PKEY_free(pkey);
+        }
+
+
+        inline static lsquic_stream_if streamCallbacks = {
+            .on_new_conn = [](void *streamIfCtx, lsquic_conn_t *c) -> lsquic_conn_ctx * {
+                auto *ctx = static_cast<common::QuicConnectionContext *>(lsquic_conn_get_peer_ctx(c, nullptr));
+                ctx->connection = c;
+                spdlog::info("New QUIC connection on ICE Comp {}", ctx->componentId);
+                common::g_stats.start_receiver();
+
+                return reinterpret_cast<lsquic_conn_ctx *>(ctx);
+            },
+            .on_conn_closed = [](lsquic_conn_t *c) {
+                auto *ctx = reinterpret_cast<common::QuicConnectionContext *>(lsquic_conn_get_ctx(c));
+                spdlog::warn("QUIC Connection closed on ICE Comp {}", ctx ? ctx->componentId : 0);
+                lsquic_conn_set_ctx(c, nullptr);
+                if (ctx) {
+                    ctx->connection = nullptr;
+                }
+            },
+            .on_new_stream = [](void *stream_if_ctx, lsquic_stream_t *stream) -> lsquic_stream_ctx_t * {
+                lsquic_stream_wantread(stream, 1);
+                return nullptr;
+            },
+            .on_read = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
+                unsigned char buf[65536];
+                ssize_t nread;
+
+                // Drain everything available
+                while ((nread = lsquic_stream_read(stream, buf, sizeof(buf))) > 0) {
+                    // ATOMIC ADD (Thread-Safe Aggregate Count)
+                    common::g_stats.total_bytes += nread;
+                }
+
+                if (nread == 0) {
+                    // EOF (Sender finished)
+                    lsquic_stream_shutdown(stream, 0);
+                    lsquic_stream_close(stream);
+                }
+            },
+            .on_write = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
+            },
+            .on_close = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
+                common::g_stats.finish_receiver();
+            },
+            .on_hsk_done = [](lsquic_conn_t *c, enum lsquic_hsk_status status) {
+                auto *ctx = reinterpret_cast<common::QuicConnectionContext *>(lsquic_conn_get_ctx(c));
+                if (status == LSQ_HSK_OK || status == LSQ_HSK_RESUMED_OK) {
+                    spdlog::info("QUIC Handshake SUCCESS on ICE Comp {}", ctx->componentId);
+                }
+            }
+        };
+
+    public:
+        static void initialize() {
+            sslCtx_ = createSslCtx();
+            SSL_CTX_set_alpn_select_cb(sslCtx_, alpnSelectCallback, nullptr);
+            loadInMemoryCertificate(sslCtx_);
+            lsquic_global_init(LSQUIC_GLOBAL_SERVER);
+            lsquic_engine_settings settings;
+            lsquic_engine_init_settings(&settings, LSENG_SERVER);
+            settings.es_versions = (1 << LSQVER_I001);
+            settings.es_cc_algo = 2;
+            settings.es_init_max_data = ReceiverConfig::quicConnWindowBytes;
+            settings.es_init_max_streams_uni = ReceiverConfig::quicMaxIncomingStreams;
+            settings.es_init_max_streams_bidi = ReceiverConfig::quicMaxIncomingStreams;
+            settings.es_idle_conn_to = 30000000;
+            settings.es_init_max_stream_data_uni = ReceiverConfig::quicStreamWindowBytes;
+            settings.es_init_max_stream_data_bidi_local = ReceiverConfig::quicStreamWindowBytes;
+            settings.es_init_max_stream_data_bidi_remote = ReceiverConfig::quicStreamWindowBytes;
+            settings.es_handshake_to = 16777215;
+            settings.es_allow_migration = 0;
+
+            char err_buf[256];
+            if (0 != lsquic_engine_check_settings(&settings, LSENG_SERVER, err_buf, sizeof(err_buf))) {
+                spdlog::error("Invalid lsquic engine settings: {}", err_buf);
+                return;
+            }
+            lsquic_engine_api api = {};
+            api.ea_settings = &settings;
+            api.ea_stream_if = &streamCallbacks;
+            api.ea_packets_out = sendPackets;
+            api.ea_get_ssl_ctx = getSslCtx;
+            engine_ = lsquic_engine_new(LSENG_SERVER, &api);
+
+            spdlog::info("LSQUIC Engine Successfully Initialized. {}", engine_ == nullptr);
+        }
+
+
+        static void receiveTransfer(NiceAgent *agent, const guint streamId, GMainContext *niceContext, const int n) {
+            for (int i = 1; i <= n; i++) {
+                setAndVerifySocketBuffers(agent, streamId, i, ReceiverConfig::udpBufferBytes);
+                NiceCandidate *local = nullptr, *remote = nullptr;
+                if (!nice_agent_get_selected_pair(agent, streamId, i, &local, &remote)) {
+                    spdlog::error("ICE component {} is not ready for QUIC connection", i);
+                    continue;
+                }
+
+                auto *ctx = new common::QuicConnectionContext();
+                ctx->agent = agent;
+                ctx->streamId = streamId;
+                ctx->componentId = i;
+                nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
+                nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));
+
+
+                GSource *source = g_source_new(&common::quic_funcs, sizeof(common::QuicProcessSource));
+                ((common::QuicProcessSource *) source)->ctx = ctx;
+
+
+                g_source_set_priority(source, G_PRIORITY_HIGH);
+                g_source_attach(source, niceContext);
+                g_source_unref(source);
+
+                connectionContexts_.push_back(ctx);
+
+
+                nice_agent_attach_recv(agent, streamId, i, niceContext,
+                                       [](NiceAgent *agent, guint stream_id, guint component_id,
+                                          guint len, gchar *buf, gpointer user_data) {
+                                           auto *c = static_cast<common::QuicConnectionContext *>(user_data);
+
+                                           lsquic_engine_packet_in(engine_, (unsigned char *) buf, len,
+                                                                   (sockaddr *) &c->localAddr,
+                                                                   (sockaddr *) &c->remoteAddr,
+                                                                   c, 0);
+
+                                           c->tickScheduled = true;
+                                       },
+                                       ctx
+                );
+
+
+                process();
+
+                source = g_timeout_source_new(0);
+                g_source_set_callback(source, engineTick, nullptr, nullptr);
+                g_source_attach(source, niceContext);
+                g_source_unref(source);
+            }
+        }
+    };
+};
