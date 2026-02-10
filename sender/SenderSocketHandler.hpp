@@ -129,10 +129,6 @@ namespace sender {
                                                       // Clean up the source reference
                                                       g_source_unref(source);
 
-
-                                                      SenderStream::startTransfer(
-                                                          agent, streamId, common::IceHandler::getContext(), n,
-                                                          receiverId);
                                                   } else {
                                                       spdlog::error("Failed to establish ICE connection.");
                                                   }
