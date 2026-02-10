@@ -9,8 +9,12 @@
 #include "Utils.hpp"
 
 #include <chrono>
+#include <boost/asio/steady_timer.hpp>
 
 namespace common {
+
+
+
 
     struct GlobalBenchStats {
         std::atomic<size_t> total_bytes{0};
@@ -40,20 +44,53 @@ namespace common {
             auto end = std::chrono::steady_clock::now();
             std::chrono::duration<double> diff = end - start_time;
             double gb = total_bytes / (1024.0 * 1024.0 * 1024.0);
-            double mbps = (total_bytes * 8.0) / (diff.count() * 1000000.0);
+            double mbps = (total_bytes ) / (diff.count() * 1000000.0);
 
             spdlog::info("\n=== CRUSHER BENCHMARK REPORT ===");
             spdlog::info("  Total Data Transferred: {:.2f} GB", gb);
             spdlog::info("  Total Time:             {:.2f} seconds", diff.count());
-            spdlog::info("  Aggregate Throughput:   {:.2f} Mbps", mbps);
+            spdlog::info("  Aggregate Throughput:   {:.2f} MB/s", mbps);
             spdlog::info("================================\n");
         }
     };
 
     static GlobalBenchStats g_stats;
 
+
+
     // A reusable 64KB chunk of garbage data for the sender to blast
     static char JUNK_BUFFER[64 * 1024];
+
+    struct ThroughputPrinter : std::enable_shared_from_this<ThroughputPrinter> {
+        boost::asio::steady_timer timer;
+        GlobalBenchStats& stats;
+        size_t last_bytes = 0;
+
+        ThroughputPrinter(boost::asio::io_context& ctx, GlobalBenchStats& s)
+            : timer(ctx), stats(s) {}
+
+        void start() {
+            print_loop();
+        }
+
+        void print_loop() {
+            timer.expires_after(std::chrono::seconds(1));
+
+            // "shared_from_this()" keeps the object alive while waiting
+            timer.async_wait([self = shared_from_this()](boost::system::error_code ec) {
+                if (!ec) {
+                    // Read Stats
+                    size_t current = self->stats.total_bytes.load(std::memory_order_relaxed);
+                    double mbps = (current - self->last_bytes)  / 1000000.0;
+
+                    std::cout << "[Monitor] " << mbps << " MB/s" << std::endl;
+
+                    self->last_bytes = current;
+                    self->print_loop(); // Recurse
+                }
+            });
+        }
+    };
 
 
 

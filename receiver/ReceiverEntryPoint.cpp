@@ -9,6 +9,12 @@
 #include "ReceiverSocketHandler.hpp"
 
 int main(const int argc, char **argv) {
+
+    boost::asio::io_context io;
+    auto worker = boost::asio::make_work_guard(io);
+    std::make_shared<common::ThroughputPrinter>(io, common::g_stats)->start();
+    std::thread t([&io](){ io.run(); });
+
     receiver::ReceiverConfig::initialize(argc, argv);
 
     common::IceHandler::initialize();
