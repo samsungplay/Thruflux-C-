@@ -15,23 +15,23 @@ int main(const int argc, char **argv) {
     sender::SenderConfig::initialize(argc, argv);
 
 
-    std::vector<std::string> rawStunUrls;
-    boost::split(rawStunUrls, sender::SenderConfig::stunServers, boost::is_any_of(","), boost::token_compress_on);
-
-    for (const auto &rawStunUrl: rawStunUrls) {
-        if (auto stunServer = common::Utils::toStunServer(rawStunUrl); stunServer.has_value()) {
-            common::IceHandler::addStunServer(stunServer.value());
-        }
-    }
-
-    std::vector<std::string> rawTurnUrls;
-    boost::split(rawTurnUrls, sender::SenderConfig::turnServers, boost::is_any_of(","), boost::token_compress_on);
-
-    for (const auto &rawTurnUrl: rawTurnUrls) {
-        if (auto turnServer = common::Utils::toTurnServer(rawTurnUrl); turnServer.has_value()) {
-            common::IceHandler::addTurnServer(turnServer.value());
-        }
-    }
+    // std::vector<std::string> rawStunUrls;
+    // boost::split(rawStunUrls, sender::SenderConfig::stunServers, boost::is_any_of(","), boost::token_compress_on);
+    //
+    // for (const auto &rawStunUrl: rawStunUrls) {
+    //     if (auto stunServer = common::Utils::toStunServer(rawStunUrl); stunServer.has_value()) {
+    //         common::IceHandler::addStunServer(stunServer.value());
+    //     }
+    // }
+    //
+    // std::vector<std::string> rawTurnUrls;
+    // boost::split(rawTurnUrls, sender::SenderConfig::turnServers, boost::is_any_of(","), boost::token_compress_on);
+    //
+    // for (const auto &rawTurnUrl: rawTurnUrls) {
+    //     if (auto turnServer = common::Utils::toTurnServer(rawTurnUrl); turnServer.has_value()) {
+    //         common::IceHandler::addTurnServer(turnServer.value());
+    //     }
+    // }
 
 
     ix::initNetSystem();

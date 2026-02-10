@@ -15,7 +15,6 @@ namespace common {
 
 
 
-
     struct GlobalBenchStats {
         std::atomic<size_t> total_bytes{0};
         std::atomic<int> active_senders{0};
@@ -44,7 +43,7 @@ namespace common {
             auto end = std::chrono::steady_clock::now();
             std::chrono::duration<double> diff = end - start_time;
             double gb = total_bytes / (1024.0 * 1024.0 * 1024.0);
-            double mbps = (total_bytes ) / (diff.count() * 1000000.0);
+            double mbps = (total_bytes) / (diff.count() * 1000000.0);
 
             spdlog::info("\n=== CRUSHER BENCHMARK REPORT ===");
             spdlog::info("  Total Data Transferred: {:.2f} GB", gb);
@@ -57,17 +56,17 @@ namespace common {
     static GlobalBenchStats g_stats;
 
 
-
     // A reusable 64KB chunk of garbage data for the sender to blast
     static char JUNK_BUFFER[64 * 1024];
 
     struct ThroughputPrinter : std::enable_shared_from_this<ThroughputPrinter> {
         boost::asio::steady_timer timer;
-        GlobalBenchStats& stats;
+        GlobalBenchStats &stats;
         size_t last_bytes = 0;
 
-        ThroughputPrinter(boost::asio::io_context& ctx, GlobalBenchStats& s)
-            : timer(ctx), stats(s) {}
+        ThroughputPrinter(boost::asio::io_context &ctx, GlobalBenchStats &s)
+            : timer(ctx), stats(s) {
+        }
 
         void start() {
             print_loop();
@@ -81,7 +80,7 @@ namespace common {
                 if (!ec) {
                     // Read Stats
                     size_t current = self->stats.total_bytes.load(std::memory_order_relaxed);
-                    double mbps = (current - self->last_bytes)  / 1000000.0;
+                    double mbps = (current - self->last_bytes) / 1000000.0;
 
                     std::cout << "[Monitor] " << mbps << " MB/s" << std::endl;
 
@@ -91,7 +90,6 @@ namespace common {
             });
         }
     };
-
 
 
     struct QuicConnectionContext {
@@ -105,6 +103,40 @@ namespace common {
         bool tickScheduled = false;
     };
 
+    // 1. The Callback Function
+    // lsquic calls this for every log message.
+    static int spdlog_log_buf(void *ctx, const char *buf, size_t len) {
+        // buf is NOT null-terminated, so we must construct a string carefully.
+        // lsquic logs often end with a newline, which spdlog also adds. Let's trim it.
+        std::string msg(buf, len);
+
+        // Remove trailing newline if present to avoid double-spacing in logs
+        if (!msg.empty() && msg.back() == '\n') {
+            msg.pop_back();
+        }
+
+        // You can choose the level here. lsquic is chatty, so 'debug' or 'info' is usually best.
+        // If you want to map lsquic levels to spdlog levels, you'd need the complex version,
+        // but this simple version works for 99% of debugging.
+        spdlog::info("[LSQUIC] {}", msg);
+
+        return 0; // Success
+    }
+
+    // 2. The Struct Definition
+    static const struct lsquic_logger_if spdlog_logger_if = {
+        .log_buf = spdlog_log_buf,
+    };
+
+    // 3. Initialization (Call this once at startup)
+    static void init_lsquic_logging() {
+        // Set the level you want lsquic to output internally
+        lsquic_set_log_level("debug");
+
+        // Initialize with our custom interface
+        lsquic_logger_init(&spdlog_logger_if, NULL, LLTS_NONE);
+    }
+
     class Stream {
     protected:
 
@@ -112,8 +144,6 @@ namespace common {
         inline static lsquic_engine_t *engine_;
         inline static std::vector<QuicConnectionContext *> connectionContexts_;
         inline static SSL_CTX *sslCtx_ = nullptr;
-
-
 
 
         static gboolean engineTick(gpointer data) {
@@ -220,6 +250,7 @@ namespace common {
                     nullptr,
                     nullptr
                 );
+
 
                 if (nSent < 0) {
                     break;

@@ -63,7 +63,11 @@ namespace common {
             return context_;
         }
 
+
+
         static void initialize() {
+
+
             g_networking_init();
             context_ = g_main_context_new();
             loop_ = g_main_loop_new(context_, FALSE);
@@ -72,7 +76,10 @@ namespace common {
                 g_main_loop_run(loop_);
                 g_main_context_pop_thread_default(context_);
             });
+
+
             spdlog::info("Network I/O Loop Initialized.");
+
         }
 
         static void dispose(const std::string &receiverId) {

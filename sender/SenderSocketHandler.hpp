@@ -15,6 +15,28 @@
 #include "../common/Worker.hpp"
 
 namespace sender {
+    struct DelayedTransferTask {
+        NiceAgent *agent;
+        guint streamId;
+        int n;
+        std::string receiverId;
+    };
+
+    static gboolean execute_delayed_transfer(gpointer data) {
+        auto *task = static_cast<DelayedTransferTask *>(data);
+
+        spdlog::info("3s delay finished. Starting Transfer for {}", task->receiverId);
+
+        // Call your actual logic
+        SenderStream::startTransfer(task->agent, task->streamId, common::IceHandler::getContext(), task->n,
+                                    task->receiverId);
+
+        // Clean up the memory we allocated for the task
+        delete task;
+
+        return FALSE; // Return FALSE so the timer only runs ONCE
+    }
+
     class SenderSocketHandler {
     public:
         static void onConnect(ix::WebSocket &socket) {
@@ -83,7 +105,31 @@ namespace sender {
                                                            const int n) {
                                                   if (success) {
                                                       spdlog::info(
-                                                          "ICE connection has been established!");
+                                                          "ICE connection has been established! waiting 3s...");
+
+                                                      auto *task = new DelayedTransferTask{
+                                                          agent,
+                                                          streamId,
+                                                          n,
+                                                          receiverId
+                                                      };
+
+                                                      GMainContext *my_context = common::IceHandler::getContext();
+
+                                                      // Create the source for the timer
+                                                      GSource *source = g_timeout_source_new_seconds(3);
+
+                                                      // Set the callback (same function as before)
+                                                      g_source_set_callback(
+                                                          source, (GSourceFunc) execute_delayed_transfer, task, NULL);
+
+                                                      // ATTACH it specifically to your IceHandler's context
+                                                      g_source_attach(source, my_context);
+
+                                                      // Clean up the source reference
+                                                      g_source_unref(source);
+
+
                                                       SenderStream::startTransfer(
                                                           agent, streamId, common::IceHandler::getContext(), n,
                                                           receiverId);

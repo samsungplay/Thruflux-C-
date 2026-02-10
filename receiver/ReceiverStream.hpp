@@ -107,6 +107,7 @@ namespace receiver {
 
     public:
         static void initialize() {
+            // common::init_lsquic_logging();
             sslCtx_ = createSslCtx();
             SSL_CTX_set_alpn_select_cb(sslCtx_, alpnSelectCallback, nullptr);
             loadInMemoryCertificate(sslCtx_);
@@ -154,7 +155,7 @@ namespace receiver {
                 ctx->agent = agent;
                 ctx->streamId = streamId;
                 ctx->componentId = i;
-                nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
+                nice_address_copy_to_sockaddr(&local->base_addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
                 nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));
 
 
@@ -175,9 +176,9 @@ namespace receiver {
                                            auto *c = static_cast<common::QuicConnectionContext *>(user_data);
 
                                            lsquic_engine_packet_in(engine_, (unsigned char *) buf, len,
-                                                                   (sockaddr *) &c->localAddr,
-                                                                   (sockaddr *) &c->remoteAddr,
-                                                                   c, 0);
+                                                                            (sockaddr *) &c->localAddr,
+                                                                            (sockaddr *) &c->remoteAddr,
+                                                                            c, 0);
 
                                            c->tickScheduled = true;
                                        },

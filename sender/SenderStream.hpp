@@ -105,6 +105,8 @@ namespace sender {
 
     public:
         static void initialize() {
+
+            // common::init_lsquic_logging();
             sslCtx_ = createSslCtx();
             lsquic_global_init(LSQUIC_GLOBAL_CLIENT);
             lsquic_engine_settings settings;
@@ -120,6 +122,7 @@ namespace sender {
             settings.es_init_max_stream_data_bidi_remote = SenderConfig::quicStreamWindowBytes;
             settings.es_handshake_to = 30000000;
             settings.es_allow_migration = 0;
+
 
             char err_buf[256];
             if (0 != lsquic_engine_check_settings(&settings, 0, err_buf, sizeof(err_buf))) {
@@ -149,13 +152,16 @@ namespace sender {
                     continue;
                 }
 
+
                 auto *ctx = new common::QuicConnectionContext();
                 ctx->agent = agent;
                 ctx->streamId = streamId;
                 ctx->componentId = i;
                 ctx->receiverId = receiverId;
-                nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
+                nice_address_copy_to_sockaddr(&local->base_addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
                 nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));
+
+
 
                 GSource *source = g_source_new(&common::quic_funcs, sizeof(common::QuicProcessSource));
                 ((common::QuicProcessSource *) source)->ctx = ctx;
