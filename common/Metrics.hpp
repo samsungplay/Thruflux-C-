@@ -82,7 +82,8 @@ namespace common {
                         }
 
                         std::cout << " | AVG: " << Utils::sizeToReadableFormat(averageMbps) << "/s"
-                                << " | EWMA: " << Utils::sizeToReadableFormat(stats->ewmaMbps) << "/s | Percent:" << pct << "%\n";
+                                << " | EWMA: " << Utils::sizeToReadableFormat(stats->ewmaMbps) << "/s | Percent:" << pct
+                                << "%\n";
 
                         stats->lastSnapshot = current;
                     }
@@ -104,7 +105,8 @@ namespace common {
                             << " Total Received: " << Utils::sizeToReadableFormat(current) << "\n"
                             << " Current Speed:  " << Utils::sizeToReadableFormat(mbps) << "/s\n"
                             << " Average Speed:  " << Utils::sizeToReadableFormat(averageMbps) << "/s\n"
-                            << " EWMA Speed:   " << Utils::sizeToReadableFormat(receiverMetrics.ewmaMbps) << "/s\n";
+                            << " EWMA Speed:   " << Utils::sizeToReadableFormat(receiverMetrics.ewmaMbps) << "/s\n"
+                            << " Seconds Elapsed: " << receiverMetrics.samplesCount << "s\n";
 
                     receiverMetrics.lastSnapshot = current;
                 }
