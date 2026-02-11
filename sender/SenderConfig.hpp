@@ -23,7 +23,7 @@ public:
     inline static int quicMaxIncomingStreams = 256;
     inline static int chunkSize = 16384;
     inline static int totalConnections = 1;
-    inline static int totalStreams = 4;
+    inline static int totalStreams = 8;
     inline static int udpBufferBytes = 8388608;
     inline static bool benchmark = false;
     inline static bool verbose = false;

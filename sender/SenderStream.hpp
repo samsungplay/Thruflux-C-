@@ -289,7 +289,6 @@ namespace sender {
                             for (int i = 0; i < SenderConfig::totalStreams; i++) {
                                 lsquic_conn_make_stream(connCtx->connection);
                             }
-
                         }
                     }
                 }
@@ -328,23 +327,8 @@ namespace sender {
                     return;
                 }
 
-                //queue up streams until control stream handshake completes
-                if (!ctx->state->receiverReady) {
-                    ctx->state->pendingStreams.push_back(stream);
-                    lsquic_stream_wantwrite(stream, 0);
-                    return;
-                }
-
-
-                // static constexpr int BATCH_SIZE = 256 * 1024;
-                // int bytesWrittenThisTick = 0;
 
                 while (true) {
-                    // if (bytesWrittenThisTick >= BATCH_SIZE) {
-                    //     lsquic_stream_wantwrite(stream, 1);
-                    //     return;
-                    // }
-
                     if (ctx->sendingHeader) {
                         size_t remaining = 16 - ctx->headerSent;
                         ssize_t nw = lsquic_stream_write(stream, ctx->headerBuf + ctx->headerSent, remaining);
