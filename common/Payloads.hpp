@@ -7,6 +7,13 @@
 
 namespace common {
 
+    struct AcknowledgeTransferSessionPayload {
+        std::string type = "acknowledge_transfer_session_payload";
+        std::string receiverId;
+    };
+
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(AcknowledgeTransferSessionPayload, type, receiverId);
+
     struct QuitTransferSessionPayload {
         std::string type = "quit_transfer_session_payload";
         std::string receiverId;
@@ -31,12 +38,6 @@ namespace common {
 
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(JoinTransferSessionPayload, type, candidatesResult, joinCode, receiverId);
 
-    struct ErrorPayload {
-        std::string type = "error_payload";
-        std::string message;
-    };
-
-    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ErrorPayload, type, message);
 
     struct TurnCredentialsPayload {
         std::string type = "turn_credentials_payload";

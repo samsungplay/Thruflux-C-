@@ -12,7 +12,6 @@
 #include <boost/asio/steady_timer.hpp>
 
 namespace common {
-
     static constexpr uint64_t CONTROL_STREAM_ID = 2;
 
     struct FileHandleCache {
@@ -106,23 +105,34 @@ namespace common {
         inline static lsquic_engine_t *engine_;
         inline static std::vector<QuicConnectionContext *> connectionContexts_;
         inline static SSL_CTX *sslCtx_ = nullptr;
+        inline static bool processScheduled = false;
 
+        static gboolean processWhenIdle() {
+            process();
+            processScheduled = false;
+            return G_SOURCE_REMOVE;
+        }
 
         static gboolean engineTick(gpointer data) {
-            if (!engine_) {
-                return G_SOURCE_REMOVE;
-            }
+            if (!engine_) return G_SOURCE_REMOVE;
 
             process();
 
             int diff;
-            if (lsquic_engine_earliest_adv_tick(engine_, &diff)) {
-                if (diff < 0) diff = 0;
+            guint intervalMs = 100;
 
-                g_timeout_add(diff / 1000, engineTick, nullptr);
-            } else {
-                g_timeout_add(100, engineTick, nullptr);
+            if (lsquic_engine_earliest_adv_tick(engine_, &diff)) {
+                if (diff < 0) {
+                    intervalMs = 0;
+                } else {
+                    intervalMs = static_cast<guint>((diff + 999) / 1000);
+                }
             }
+
+            if (intervalMs == 0) intervalMs = 1;
+
+
+            g_timeout_add_full(G_PRIORITY_HIGH, intervalMs, engineTick, nullptr, nullptr);
 
             return G_SOURCE_REMOVE;
         }
@@ -292,37 +302,5 @@ namespace common {
         static void process() {
             if (engine_) lsquic_engine_process_conns(engine_);
         }
-    };
-
-
-    struct QuicProcessSource {
-        GSource source;
-        QuicConnectionContext *ctx;
-    };
-
-
-    static gboolean quic_prepare(GSource *source, gint *timeout) {
-        auto *qs = (QuicProcessSource *) source;
-        *timeout = -1;
-        return qs->ctx->tickScheduled;
-    }
-
-    static gboolean quic_check(GSource *source) {
-        auto *qs = (QuicProcessSource *) source;
-        return qs->ctx->tickScheduled;
-    }
-
-    static gboolean quic_dispatch(GSource *source, GSourceFunc callback, gpointer user_data) {
-        auto *qs = (QuicProcessSource *) source;
-        Stream::process();
-        qs->ctx->tickScheduled = false;
-        return G_SOURCE_CONTINUE;
-    }
-
-    static GSourceFuncs quic_funcs = {
-        quic_prepare,
-        quic_check,
-        quic_dispatch,
-        nullptr
     };
 }

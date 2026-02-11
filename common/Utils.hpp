@@ -12,11 +12,13 @@ namespace common {
     class Utils {
     public:
 
-        static std::string sizeToReadableFormat(const std::uint64_t size) {
-            if (size < 1024) return std::to_string(size) + "B";
-            const int exp = static_cast<int>(std::log(size) / std::log(1024));
+        static std::string sizeToReadableFormat(const double size) {
+            if (size <= 0.0) return "0 B";
+            if (size < 1024.0) return std::format("{:.0f} B", size);
+            int exp = static_cast<int>(std::log(size) / std::log(1024));
             static const std::string units = "KMGTPE";
-            return std::format("{:.1f} {}B", size / std::pow(1024, exp), units[exp-1]);
+            exp = std::min(exp, static_cast<int>(units.length()));
+            return std::format("{:.2f} {}B", size / std::pow(1024, exp), units[exp - 1]);
         }
 
         static std::optional<StunServer> toStunServer(const std::string_view raw) {

@@ -70,18 +70,25 @@ namespace sender {
     class SenderStateHolder {
         inline static common::CreateTransferSessionPayload manifest_;
         inline static std::unordered_map<std::string, std::shared_ptr<ReceiverInfo> > receivers_;
-        inline static std::mutex mutex;
         inline static std::string joinCode_;
         inline static std::vector<std::string> absolutePaths_;
         inline static std::vector<std::string> relativePaths_;
+        inline static std::uint64_t totalExpectedBytes_;
+        inline static int totalExpectedFilesCount_;
 
     public:
+
+        static void setTotalExpectedFilesCount(int count) {
+            totalExpectedFilesCount_ = count;
+        }
+        static void setTotalExpectedBytes(std::uint64_t bytes) {
+            totalExpectedBytes_ = bytes;
+        }
+
         static void setAbsolutePaths(std::vector<std::string> paths) {
-            std::lock_guard lock(mutex);
             absolutePaths_ = std::move(paths);
         }
         static void setRelativePaths(std::vector<std::string> paths) {
-            std::lock_guard lock(mutex);
             relativePaths_ = std::move(paths);
         }
 
@@ -89,27 +96,31 @@ namespace sender {
             return absolutePaths_;
         }
 
+        static int getTotalExpectedFilesCount() {
+            return totalExpectedFilesCount_;
+        }
+
         static std::vector<std::string>& getRelativePaths() {
             return relativePaths_;
         }
 
+        static std::uint64_t getTotalExpectedBytes() {
+            return totalExpectedBytes_;
+        }
+
         static void addReceiver(std::string receiverId) {
-            std::lock_guard lock(mutex);
             receivers_.insert_or_assign(receiverId, std::make_shared<ReceiverInfo>(std::move(receiverId)));
         }
 
         static void setJoinCode(std::string joinCode) {
-            std::lock_guard lock(mutex);
             joinCode_ = std::move(joinCode);
         }
 
         static std::string getJoinCode() {
-            std::lock_guard lock(mutex);
             return joinCode_;
         }
 
         static std::vector<std::shared_ptr<ReceiverInfo> > getReceivers() {
-            std::lock_guard lock(mutex);
             std::vector<std::shared_ptr<ReceiverInfo> > snapshot;
             for (const auto &info: receivers_ | std::views::values) {
                 snapshot.push_back(info);
@@ -118,7 +129,6 @@ namespace sender {
         }
 
         static std::shared_ptr<ReceiverInfo> getReceiverInfo(const std::string &receiverId) {
-            std::lock_guard lock(mutex);
             const auto it = receivers_.find(receiverId);
             if (it == receivers_.end()) {
                 return nullptr;
@@ -127,7 +137,6 @@ namespace sender {
         }
 
         static void removeReceiver(const std::string &receiverId) {
-            std::lock_guard lock(mutex);
             receivers_.erase(receiverId);
         }
     };

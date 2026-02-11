@@ -11,15 +11,6 @@
 int main(const int argc, char **argv) {
     receiver::ReceiverConfig::initialize(argc, argv);
 
-    //Start UI Loop
-    boost::asio::io_context uiIo;
-    auto worker = boost::asio::make_work_guard(uiIo);
-    auto benchmarker = std::make_shared<common::Benchmarker>(uiIo, false);
-    benchmarker->initialize();
-    boost::asio::post(common::Worker::uiWorker(), [&uiIo] {
-        uiIo.run();
-    });
-
     common::IceHandler::initialize();
 
     std::vector<std::string> rawStunUrls;
@@ -46,7 +37,6 @@ int main(const int argc, char **argv) {
     receiver::ReceiverStream::initialize();
     ix::WebSocket socketClient;
     socketClient.disableAutomaticReconnection();
-    std::latch clientDone{1};
 
 
     socketClient.setUrl(common::Utils::toWebSocketURL(receiver::ReceiverConfig::serverUrl));
@@ -56,13 +46,13 @@ int main(const int argc, char **argv) {
     socketClient.setExtraHeaders(headers);
     socketClient.setPingInterval(30);
 
-    socketClient.setOnMessageCallback([&socketClient, &clientDone](const ix::WebSocketMessagePtr &msg) {
+    socketClient.setOnMessageCallback([&socketClient](const ix::WebSocketMessagePtr &msg) {
         if (msg->type == ix::WebSocketMessageType::Open) {
             receiver::ReceiverSocketHandler::onConnect(socketClient);
         } else if (msg->type == ix::WebSocketMessageType::Message) {
             receiver::ReceiverSocketHandler::onMessage(socketClient, msg->str);
         } else if (msg->type == ix::WebSocketMessageType::Close) {
-            receiver::ReceiverSocketHandler::onClose(socketClient, clientDone, msg->closeInfo.reason);
+            receiver::ReceiverSocketHandler::onClose(socketClient,  msg->closeInfo.reason);
         }
     });
 
@@ -70,7 +60,7 @@ int main(const int argc, char **argv) {
 
     socketClient.start();
 
-    clientDone.wait();
+    common::ThreadManager::runMainLoop();
 
     socketClient.stop();
 

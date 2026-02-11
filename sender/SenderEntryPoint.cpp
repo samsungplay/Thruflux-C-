@@ -14,14 +14,6 @@ int main(const int argc, char **argv) {
 
     sender::SenderConfig::initialize(argc, argv);
 
-    //Start UI Loop
-    boost::asio::io_context uiIo;
-    auto worker = boost::asio::make_work_guard(uiIo);
-    auto benchmarker = std::make_shared<common::Benchmarker>(uiIo, true);
-    benchmarker->initialize();
-    boost::asio::post(common::Worker::uiWorker(), [&uiIo] {
-        uiIo.run();
-    });
     std::vector<std::string> rawStunUrls;
     boost::split(rawStunUrls, sender::SenderConfig::stunServers, boost::is_any_of(","), boost::token_compress_on);
 
@@ -44,7 +36,6 @@ int main(const int argc, char **argv) {
     ix::initNetSystem();
     ix::WebSocket socketClient;
     socketClient.disableAutomaticReconnection();
-    std::latch clientDone{1};
     common::IceHandler::initialize();
 
     sender::SenderStream::initialize();
@@ -57,13 +48,13 @@ int main(const int argc, char **argv) {
     socketClient.setExtraHeaders(headers);
     socketClient.setPingInterval(30);
 
-    socketClient.setOnMessageCallback([&socketClient, &clientDone](const ix::WebSocketMessagePtr &msg) {
+    socketClient.setOnMessageCallback([&socketClient](const ix::WebSocketMessagePtr &msg) {
         if (msg->type == ix::WebSocketMessageType::Open) {
             sender::SenderSocketHandler::onConnect(socketClient);
         } else if (msg->type == ix::WebSocketMessageType::Message) {
             sender::SenderSocketHandler::onMessage(socketClient, msg->str);
         } else if (msg->type == ix::WebSocketMessageType::Close) {
-            sender::SenderSocketHandler::onClose(socketClient, clientDone, msg->closeInfo.reason);
+            sender::SenderSocketHandler::onClose(socketClient, msg->closeInfo.reason);
         }
     });
 
@@ -71,7 +62,7 @@ int main(const int argc, char **argv) {
 
     socketClient.start();
 
-    clientDone.wait();
+    common::ThreadManager::runMainLoop();
 
     socketClient.stop();
 

@@ -8,6 +8,7 @@
 
 #include "../common/Metrics.hpp"
 #include "../common/Stream.hpp"
+#include "SenderStateHolder.hpp"
 
 namespace sender {
     struct MmapEntry {
@@ -64,8 +65,9 @@ namespace sender {
         void init(const std::vector<std::string> &paths, const std::vector<std::string> &relativePaths) {
             files.clear();
             for (int i = 0; i < paths.size(); i++) {
+                std::uint64_t size = std::filesystem::file_size(paths[i]);
                 files.push_back({
-                    static_cast<uint32_t>(i), std::filesystem::file_size(paths[i]),
+                    static_cast<uint32_t>(i), size,
                     paths[i], relativePaths[i]
                 });
             }
@@ -122,6 +124,7 @@ namespace sender {
         bool isControlStream = false;
         std::shared_ptr<TransferState> state;
         std::shared_ptr<MmapEntry> currentMmap;
+        std::shared_ptr<common::SenderTransferMetrics> senderMetrics;
         uint32_t fileId = 0;
         uint64_t offset = 0;
         uint32_t len = 0;
@@ -144,6 +147,7 @@ namespace sender {
 
                 if (off >= f.size) {
                     state->currentFileIndex++;
+                    senderMetrics->filesSent++;
                     state->currentFileOffset = 0;
                     continue;
                 }
@@ -173,6 +177,54 @@ namespace sender {
 
 
     class SenderStream : public common::Stream {
+        //unlike receiver, sender's progress reporter should run persistently
+        static void watchProgress() {
+            g_timeout_add_full(G_PRIORITY_HIGH, 1000, [](gpointer data)-> gboolean {
+                for (const auto &[receiverId, senderStats]: common::senderMetrics) {
+                    if (!senderStats->started) continue;
+                    const auto now = std::chrono::high_resolution_clock::now();
+                    if (senderStats->lastTime.time_since_epoch().count() == 0) {
+                        senderStats->lastTime = now;
+                        return G_SOURCE_CONTINUE;
+                    }
+
+                    std::chrono::duration<double> elapsed = now - senderStats->startedTime;
+                    std::chrono::duration<double> delta = now - senderStats->lastTime;
+
+                    const double elapsedSeconds = elapsed.count();
+                    const double deltaSeconds = delta.count();
+
+                    const double instantThroughput =
+                            (senderStats->bytesSent - senderStats->lastSnapshot) / deltaSeconds;
+                    const double averageThroughput = senderStats->bytesSent / elapsedSeconds;
+                    const double ewmaThroughput = senderStats->ewmaThroughput == 0
+                                                      ? instantThroughput
+                                                      : 0.2 * instantThroughput + 0.8 * senderStats->
+                                                        ewmaThroughput;
+
+                    const double percent = (static_cast<double>(senderStats->bytesSent) /
+                                            SenderStateHolder::getTotalExpectedBytes()) * 100.0;
+
+
+                    senderStats->lastTime = now;
+                    senderStats->lastSnapshot = senderStats->bytesSent;
+
+                    spdlog::info(
+                        "Receiver : {} | Instant Throughput: {}/s | EWMA Throughput: {}/s |  Elapsed: {}s | Average Throughput: {}/s | Total Sent: {} | Progress: {}% | "
+                        "Files {}/{}",
+                        receiverId,
+                        common::Utils::sizeToReadableFormat(instantThroughput),
+                        common::Utils::sizeToReadableFormat(ewmaThroughput), elapsedSeconds,
+                        common::Utils::sizeToReadableFormat(averageThroughput),
+                        common::Utils::sizeToReadableFormat(senderStats->bytesSent), percent,
+                        senderStats->filesSent,
+                        SenderStateHolder::getTotalExpectedFilesCount()
+                    );
+                }
+                return G_SOURCE_CONTINUE;
+            }, nullptr, nullptr);
+        }
+
         inline static lsquic_stream_if streamCallbacks = {
             .on_new_conn = [](void *streamIfCtx, lsquic_conn_t *connection) -> lsquic_conn_ctx * {
                 auto *ctx = static_cast<SenderQuicConnectionContext *>(lsquic_conn_get_peer_ctx(connection, nullptr));
@@ -206,6 +258,7 @@ namespace sender {
                 lsquic_stream_wantwrite(stream, 1);
                 auto *ctx = new SenderContext();
                 ctx->state = connCtx->state;
+                ctx->senderMetrics = connCtx->senderMetrics;
 
                 if (connCtx->componentId == 1 && !connCtx->controlStreamCreated) {
                     ctx->isControlStream = true;
@@ -231,8 +284,9 @@ namespace sender {
                     if (lsquic_stream_read(stream, buf, 1) == 1) {
                         if (buf[0] == 0x06) {
                             //Receiver ACK received. Time to blast data!
-                            if (!common::senderMetrics[connCtx->receiverId]->started) {
-                                common::senderMetrics[connCtx->receiverId]->started = true;
+                            if (!connCtx->senderMetrics->started) {
+                                connCtx->senderMetrics->started = true;
+                                connCtx->senderMetrics->startedTime = std::chrono::high_resolution_clock::now();
                             }
                             ctx->state->receiverReady = true;
                             for (auto *s: ctx->state->pendingStreams) {
@@ -245,6 +299,7 @@ namespace sender {
             },
             .on_write = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
                 auto *ctx = reinterpret_cast<SenderContext *>(h);
+
 
                 if (!ctx->typeByteSent) {
                     uint8_t tag = ctx->isControlStream ? 0x00 : 0x01;
@@ -283,11 +338,11 @@ namespace sender {
                     return;
                 }
 
+
                 static constexpr int BATCH_SIZE = 256 * 1024;
                 int bytesWrittenThisTick = 0;
 
                 while (true) {
-
                     if (bytesWrittenThisTick >= BATCH_SIZE) {
                         lsquic_stream_wantwrite(stream, 1);
                         return;
@@ -378,7 +433,6 @@ namespace sender {
             settings.es_init_max_stream_data_bidi_remote = SenderConfig::quicStreamWindowBytes;
             settings.es_handshake_to = 30000000;
             settings.es_allow_migration = 0;
-            settings.es_pace_packets = 0;
 
 
             char err_buf[256];
@@ -398,10 +452,9 @@ namespace sender {
 
 
         //assume this method will be invoked from gmainloop thread
-        static void startTransfer(NiceAgent *agent, const guint streamId, GMainContext *niceContext, const int n,
+        static void startTransfer(NiceAgent *agent, const guint streamId, const int n,
                                   std::string receiverId) {
-            size_t fileSize = std::filesystem::file_size(SenderConfig::paths[0]);
-            const auto transferStats = std::make_shared<common::SenderTransferMetrics>(receiverId, fileSize);
+            const auto transferStats = std::make_shared<common::SenderTransferMetrics>(receiverId);
             common::senderMetrics[receiverId] = transferStats;
             const auto state = std::make_shared<TransferState>();
             state->init(SenderStateHolder::getAbsolutePaths(), SenderStateHolder::getRelativePaths());
@@ -428,18 +481,10 @@ namespace sender {
                 nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));
 
 
-                GSource *source = g_source_new(&common::quic_funcs, sizeof(common::QuicProcessSource));
-                ((common::QuicProcessSource *) source)->ctx = ctx;
-
-                g_source_set_priority(source, G_PRIORITY_HIGH);
-                g_source_attach(source, niceContext);
-                g_source_unref(source);
-
-
                 connectionContexts_.push_back(ctx);
 
 
-                nice_agent_attach_recv(agent, streamId, i, niceContext,
+                nice_agent_attach_recv(agent, streamId, i, common::ThreadManager::getContext(),
                                        [](NiceAgent *agent, guint stream_id, guint component_id,
                                           guint len, gchar *buf, gpointer user_data) {
                                            auto *c = static_cast<common::QuicConnectionContext *>(user_data);
@@ -449,7 +494,12 @@ namespace sender {
                                                                    (sockaddr *) &c->remoteAddr,
                                                                    c, 0);
 
-                                           c->tickScheduled = true;
+                                           if (!processScheduled) {
+                                               processScheduled = true;
+                                               g_idle_add_full(
+                                                   G_PRIORITY_HIGH_IDLE, GSourceFunc(processWhenIdle), nullptr,
+                                                   nullptr);
+                                           }
                                        },
                                        ctx
                 );
@@ -466,12 +516,8 @@ namespace sender {
                 );
             }
 
-            process();
-
-            GSource *source = g_timeout_source_new(0);
-            g_source_set_callback(source, engineTick, nullptr, nullptr);
-            g_source_attach(source, niceContext);
-            g_source_unref(source);
+            g_timeout_add(0, engineTick, nullptr);
+            watchProgress();
         }
 
 

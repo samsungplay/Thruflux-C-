@@ -39,12 +39,14 @@ namespace server {
             if (role == "sender") {
                 TransferSessionStore::instance().removeTransferSession(id)->destroy();
             } else {
-                if (const auto receiverTransferSession = TransferSessionStore::instance().getTransferSessionByReceiverId(id);
+                if (const auto receiverTransferSession = TransferSessionStore::instance().
+                            getTransferSessionByReceiverId(id);
                     receiverTransferSession.has_value()) {
                     receiverTransferSession.value()->removeReceiver(id);
-                    receiverTransferSession.value()->senderSession()->send(nlohmann::json(common::QuitTransferSessionPayload {
-                        .receiverId = id
-                    }).dump());
+                    receiverTransferSession.value()->senderSession()->send(nlohmann::json(
+                        common::QuitTransferSessionPayload{
+                            .receiverId = id
+                        }).dump());
                 }
             }
         }
@@ -67,7 +69,8 @@ namespace server {
                         .joinCode = transferSession->joinCode()
                     }).dump());
                 } else if (!isSender && type == "join_transfer_session_payload") {
-                    if (const auto currentSession = TransferSessionStore::instance().getTransferSessionByReceiverId(session->getUserData()->id)) {
+                    if (const auto currentSession = TransferSessionStore::instance().getTransferSessionByReceiverId(
+                        session->getUserData()->id)) {
                         session->end(4000, "Duplicate Session");
                         return;
                     }
@@ -82,13 +85,24 @@ namespace server {
                     } else {
                         session->end(4004, "No Session Found");
                     }
-                }
-                else if (isSender && type == "accept_transfer_session_payload") {
+                } else if (isSender && type == "accept_transfer_session_payload") {
                     const auto payload = j.get<common::AcceptTransferSessionPayload>();
-                    if (const auto transferSession = TransferSessionStore::instance().getTransferSession(session->getUserData()->id); transferSession.has_value()) {
+                    if (const auto transferSession = TransferSessionStore::instance().getTransferSession(
+                        session->getUserData()->id); transferSession.has_value()) {
                         if (const auto receiverSession = transferSession.value()->getReceiver(payload.receiverId)) {
                             receiverSession->send(j.dump());
                         }
+                    }
+                } else if (!isSender && type == "acknowledge_transfer_session_payload") {
+                    auto payload = j.get<common::AcknowledgeTransferSessionPayload>();
+                    const auto transferSession = TransferSessionStore::instance().getTransferSessionByReceiverId(
+                        session->getUserData()->id);
+                    if (transferSession.has_value()) {
+                        //TODO: pickup from here
+                        payload.receiverId = session->getUserData()->id;
+                        transferSession.value()->senderSession()->send(nlohmann::json(payload).dump());
+                    } else {
+                        session->end(4004, "No Session Found While Acknowledging");
                     }
                 }
             } catch (const std::exception &e) {

@@ -52,6 +52,8 @@ namespace sender {
 
             SenderStateHolder::setAbsolutePaths(std::move(absoluteFilePaths));
             SenderStateHolder::setRelativePaths(std::move(filePaths));
+            SenderStateHolder::setTotalExpectedBytes(size);
+            SenderStateHolder::setTotalExpectedFilesCount(filesCount);
 
             return common::CreateTransferSessionPayload{
                 .maxReceivers = maxReceivers,
