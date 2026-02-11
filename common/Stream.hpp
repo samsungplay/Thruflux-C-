@@ -112,7 +112,7 @@ namespace common {
 
             process();
 
-            g_timeout_add_full(G_PRIORITY_HIGH, 200, engineTick, nullptr, nullptr);
+            g_timeout_add_full(G_PRIORITY_HIGH, 1, engineTick, nullptr, nullptr);
 
             return G_SOURCE_REMOVE;
         }
