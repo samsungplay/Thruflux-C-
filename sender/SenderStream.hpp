@@ -47,7 +47,6 @@ namespace sender {
         };
 
         bool receiverReady = false;
-        std::vector<lsquic_stream_t *> pendingStreams;
 
         std::vector<FileInfo> files;
         std::vector<uint8_t> manifestBlob;
@@ -231,9 +230,6 @@ namespace sender {
                 ctx->connection = connection;
                 //open control stream
                 lsquic_conn_make_stream(connection);
-                for (int i=0; i<SenderConfig::totalStreams; i++) {
-                    lsquic_conn_make_stream(connection);
-                }
 
                 spdlog::info("QUIC connection established on ICE Component {}", ctx->componentId);
 
@@ -290,10 +286,10 @@ namespace sender {
                                 connCtx->senderMetrics->startedTime = std::chrono::high_resolution_clock::now();
                             }
                             ctx->state->receiverReady = true;
-                            for (auto *s: ctx->state->pendingStreams) {
-                                lsquic_stream_wantwrite(s, 1);
+                            for (int i = 0; i < SenderConfig::totalStreams; i++) {
+                                lsquic_conn_make_stream(connCtx->connection);
                             }
-                            ctx->state->pendingStreams.clear();
+
                         }
                     }
                 }
