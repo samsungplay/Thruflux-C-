@@ -60,7 +60,7 @@ namespace receiver {
         uint32_t chunkLength = 0;
         uint32_t bodyBytesRead = 0;
         uint32_t fileId = 0;
-        alignas(4096) uint8_t writeBuffer[65536];
+        alignas(4096) uint8_t writeBuffer[256 * 1024];
     };
 
     class ReceiverStream : public common::Stream {
