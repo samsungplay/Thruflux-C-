@@ -339,14 +339,14 @@ namespace sender {
                 }
 
 
-                static constexpr int BATCH_SIZE = 256 * 1024;
-                int bytesWrittenThisTick = 0;
+                // static constexpr int BATCH_SIZE = 256 * 1024;
+                // int bytesWrittenThisTick = 0;
 
                 while (true) {
-                    if (bytesWrittenThisTick >= BATCH_SIZE) {
-                        lsquic_stream_wantwrite(stream, 1);
-                        return;
-                    }
+                    // if (bytesWrittenThisTick >= BATCH_SIZE) {
+                    //     lsquic_stream_wantwrite(stream, 1);
+                    //     return;
+                    // }
 
                     if (ctx->sendingHeader) {
                         size_t remaining = 16 - ctx->headerSent;
@@ -355,7 +355,7 @@ namespace sender {
                             return;
                         }
                         ctx->headerSent += nw;
-                        bytesWrittenThisTick += nw;
+                        // bytesWrittenThisTick += nw;
 
                         if (ctx->headerSent == 16) {
                             ctx->sendingHeader = false;
@@ -379,7 +379,7 @@ namespace sender {
 
                         ctx->bytesSent += nw;
                         connCtx->senderMetrics->bytesSent += nw;
-                        bytesWrittenThisTick += nw;
+                        // bytesWrittenThisTick += nw;
 
 
                         if (ctx->bytesSent >= ctx->len) {
