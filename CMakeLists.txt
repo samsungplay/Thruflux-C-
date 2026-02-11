@@ -47,6 +47,7 @@ add_executable(ThrufluxSender
         ${COMMON_SOURCES}
         sender/SenderStream.hpp
         common/Stream.hpp
+        common/Metrics.hpp
 )
 
 add_executable(ThrufluxReceiver
@@ -56,6 +57,7 @@ add_executable(ThrufluxReceiver
         receiver/ReceiverSocketHandler.hpp
         receiver/ReceiverStream.hpp
         common/Stream.hpp
+        common/Metrics.hpp
 )
 
 set(SHARED_LIBS

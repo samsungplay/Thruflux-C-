@@ -15,81 +15,7 @@ namespace common {
 
 
 
-    struct GlobalBenchStats {
-        std::atomic<size_t> total_bytes{0};
-        std::atomic<int> active_senders{0};
-        std::atomic<int> active_receivers{0};
 
-        std::chrono::steady_clock::time_point start_time;
-
-        void start_sender() {
-            if (active_senders++ == 0) start_time = std::chrono::steady_clock::now();
-        }
-
-        void start_receiver() {
-            if (active_receivers++ == 0) start_time = std::chrono::steady_clock::now();
-        }
-
-        void finish_sender() {
-            active_senders--;
-        }
-
-        void finish_receiver() {
-            active_receivers--;
-            if (active_receivers == 0) print_report();
-        }
-
-        void print_report() {
-            auto end = std::chrono::steady_clock::now();
-            std::chrono::duration<double> diff = end - start_time;
-            double gb = total_bytes / (1024.0 * 1024.0 * 1024.0);
-            double mbps = (total_bytes) / (diff.count() * 1000000.0);
-
-            spdlog::info("\n=== CRUSHER BENCHMARK REPORT ===");
-            spdlog::info("  Total Data Transferred: {:.2f} GB", gb);
-            spdlog::info("  Total Time:             {:.2f} seconds", diff.count());
-            spdlog::info("  Aggregate Throughput:   {:.2f} MB/s", mbps);
-            spdlog::info("================================\n");
-        }
-    };
-
-    static GlobalBenchStats g_stats;
-
-
-    // A reusable 64KB chunk of garbage data for the sender to blast
-    static char JUNK_BUFFER[64 * 1024];
-
-    struct ThroughputPrinter : std::enable_shared_from_this<ThroughputPrinter> {
-        boost::asio::steady_timer timer;
-        GlobalBenchStats &stats;
-        size_t last_bytes = 0;
-
-        ThroughputPrinter(boost::asio::io_context &ctx, GlobalBenchStats &s)
-            : timer(ctx), stats(s) {
-        }
-
-        void start() {
-            print_loop();
-        }
-
-        void print_loop() {
-            timer.expires_after(std::chrono::seconds(1));
-
-            // "shared_from_this()" keeps the object alive while waiting
-            timer.async_wait([self = shared_from_this()](boost::system::error_code ec) {
-                if (!ec) {
-                    // Read Stats
-                    size_t current = self->stats.total_bytes.load(std::memory_order_relaxed);
-                    double mbps = (current - self->last_bytes) / 1000000.0;
-
-                    std::cout << "[Monitor] " << mbps << " MB/s" << std::endl;
-
-                    self->last_bytes = current;
-                    self->print_loop(); // Recurse
-                }
-            });
-        }
-    };
 
 
     struct QuicConnectionContext {
@@ -99,41 +25,29 @@ namespace common {
         lsquic_conn_t *connection;
         sockaddr_storage localAddr;
         sockaddr_storage remoteAddr;
-        std::string receiverId;
         bool tickScheduled = false;
     };
 
-    // 1. The Callback Function
-    // lsquic calls this for every log message.
     static int spdlog_log_buf(void *ctx, const char *buf, size_t len) {
-        // buf is NOT null-terminated, so we must construct a string carefully.
-        // lsquic logs often end with a newline, which spdlog also adds. Let's trim it.
+
         std::string msg(buf, len);
 
-        // Remove trailing newline if present to avoid double-spacing in logs
         if (!msg.empty() && msg.back() == '\n') {
             msg.pop_back();
         }
 
-        // You can choose the level here. lsquic is chatty, so 'debug' or 'info' is usually best.
-        // If you want to map lsquic levels to spdlog levels, you'd need the complex version,
-        // but this simple version works for 99% of debugging.
         spdlog::info("[LSQUIC] {}", msg);
 
-        return 0; // Success
+        return 0;
     }
 
-    // 2. The Struct Definition
-    static const struct lsquic_logger_if spdlog_logger_if = {
+    static const lsquic_logger_if spdlog_logger_if = {
         .log_buf = spdlog_log_buf,
     };
 
-    // 3. Initialization (Call this once at startup)
     static void init_lsquic_logging() {
-        // Set the level you want lsquic to output internally
         lsquic_set_log_level("debug");
 
-        // Initialize with our custom interface
         lsquic_logger_init(&spdlog_logger_if, NULL, LLTS_NONE);
     }
 
@@ -321,6 +235,7 @@ namespace common {
             }
 
             connectionContexts_.clear();
+            senderMetrics.clear();
 
             lsquic_global_cleanup();
         }

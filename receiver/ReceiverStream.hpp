@@ -6,12 +6,54 @@
 #include <spdlog/spdlog.h>
 #include <openssl/x509.h>
 #include <openssl/pem.h>
+#include <sys/mman.h>
 
 #include "ReceiverConfig.hpp"
+#include "../common/Metrics.hpp"
 #include "../common/Stream.hpp"
 
 
 namespace receiver {
+    struct FileContext {
+        int fd = -1;
+        std::atomic<size_t> bytesWritten{0};
+        std::string path;
+        size_t fileSize = 0;
+
+
+        explicit FileContext(const std::string &path) : path{path} {
+            fd = open(path.c_str(), O_WRONLY | O_CREAT, 0644);
+            if (fd == -1) {
+                spdlog::error("Failed to open file for writing : {}", path);
+                return;
+            }
+
+        }
+
+        ~FileContext() {
+            if (fd != -1) {
+                fsync(fd);
+                close(fd);
+                fd = -1;
+                spdlog::info("File context closed - written {} bytes", bytesWritten.load());
+            }
+        }
+    };
+
+    inline std::shared_ptr<FileContext> currentFile;
+
+    struct ReceiverContext {
+        bool readingHeader = true;
+
+        uint8_t headerBuf[16];
+        uint8_t headerBytesRead = 0;
+
+        uint64_t chunkOffset = 0;
+        uint32_t chunkLength = 0;
+        uint32_t bodyBytesRead = 0;
+        alignas(4096) uint8_t writeBuffer[65536];
+    };
+
     class ReceiverStream : public common::Stream {
         static int alpnSelectCallback(SSL *ssl, const unsigned char **out, unsigned char *outlen,
                                       const unsigned char *in, unsigned int inlen, void *arg) {
@@ -60,7 +102,7 @@ namespace receiver {
                 auto *ctx = static_cast<common::QuicConnectionContext *>(lsquic_conn_get_peer_ctx(c, nullptr));
                 ctx->connection = c;
                 spdlog::info("New QUIC connection on ICE Comp {}", ctx->componentId);
-                common::g_stats.start_receiver();
+
 
                 return reinterpret_cast<lsquic_conn_ctx *>(ctx);
             },
@@ -74,28 +116,66 @@ namespace receiver {
             },
             .on_new_stream = [](void *stream_if_ctx, lsquic_stream_t *stream) -> lsquic_stream_ctx_t * {
                 lsquic_stream_wantread(stream, 1);
-                return nullptr;
+                return reinterpret_cast<lsquic_stream_ctx_t *>(new ReceiverContext());
             },
             .on_read = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
-                unsigned char buf[65536];
-                ssize_t nread;
-
-                // Drain everything available
-                while ((nread = lsquic_stream_read(stream, buf, sizeof(buf))) > 0) {
-                    // ATOMIC ADD (Thread-Safe Aggregate Count)
-                    common::g_stats.total_bytes += nread;
-                }
-
-                if (nread == 0) {
-                    // EOF (Sender finished)
-                    lsquic_stream_shutdown(stream, 0);
+                auto *ctx = reinterpret_cast<ReceiverContext *>(h);
+                if (!currentFile || currentFile->fd == -1) {
                     lsquic_stream_close(stream);
+                    return;
+                }
+                while (true) {
+                    if (ctx->readingHeader) {
+                        size_t remaining = 16 - ctx->headerBytesRead;
+                        ssize_t nr = lsquic_stream_read(stream, ctx->headerBuf, remaining);
+                        if (nr <= 0) {
+                            return;
+                        }
+
+                        ctx->headerBytesRead += nr;
+
+                        if (ctx->headerBytesRead == 16) {
+                            memcpy(&ctx->chunkOffset, ctx->headerBuf, 8);
+                            memcpy(&ctx->chunkLength, ctx->headerBuf + 8, 4);
+
+                            ctx->readingHeader = false;
+                            ctx->bodyBytesRead = 0;
+                        } else {
+                            return;
+                        }
+                    } else {
+                        size_t remaining = ctx->chunkLength - ctx->bodyBytesRead;
+                        size_t readSize = std::min(sizeof(ctx->writeBuffer), remaining);
+                        ssize_t nr = lsquic_stream_read(stream, ctx->writeBuffer, readSize);
+                        if (nr <= 0) {
+                            return;
+                        }
+
+                        common::receiverMetrics.bytesReceived += nr;
+                        uint64_t writePos = ctx->chunkOffset + ctx->bodyBytesRead;
+                        ssize_t nw = pwrite(currentFile->fd, ctx->writeBuffer, nr, writePos);
+
+                        if (nw < 0) {
+                            spdlog::error("Could not write to disk: {}", errno);
+                            lsquic_stream_close(stream);
+                            return;
+                        }
+
+                        ctx->bodyBytesRead += nr;
+                        currentFile->bytesWritten += nr;
+
+                        if (ctx->bodyBytesRead >= ctx->chunkLength) {
+                            ctx->readingHeader = true;
+                            ctx->headerBytesRead = 0;
+                        }
+                    }
                 }
             },
             .on_write = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
             },
             .on_close = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
-                common::g_stats.finish_receiver();
+                const auto *ctx = reinterpret_cast<ReceiverContext *>(h);
+                delete ctx;
             },
             .on_hsk_done = [](lsquic_conn_t *c, enum lsquic_hsk_status status) {
                 auto *ctx = reinterpret_cast<common::QuicConnectionContext *>(lsquic_conn_get_ctx(c));
@@ -143,6 +223,10 @@ namespace receiver {
 
 
         static void receiveTransfer(NiceAgent *agent, const guint streamId, GMainContext *niceContext, const int n) {
+            if (!currentFile) {
+                const std::filesystem::path parentDir = ReceiverConfig::out;
+                currentFile = std::make_shared<FileContext>(parentDir / "out.bin");
+            }
             for (int i = 1; i <= n; i++) {
                 setAndVerifySocketBuffers(agent, streamId, i, ReceiverConfig::udpBufferBytes);
                 NiceCandidate *local = nullptr, *remote = nullptr;
@@ -176,9 +260,9 @@ namespace receiver {
                                            auto *c = static_cast<common::QuicConnectionContext *>(user_data);
 
                                            lsquic_engine_packet_in(engine_, (unsigned char *) buf, len,
-                                                                            (sockaddr *) &c->localAddr,
-                                                                            (sockaddr *) &c->remoteAddr,
-                                                                            c, 0);
+                                                                   (sockaddr *) &c->localAddr,
+                                                                   (sockaddr *) &c->remoteAddr,
+                                                                   c, 0);
 
                                            c->tickScheduled = true;
                                        },

@@ -4,26 +4,110 @@
 #include <openssl/ssl.h>
 
 #include "SenderConfig.hpp"
-#include <gio/gio.h>
+#include <sys/mman.h>
 
+#include "../common/Metrics.hpp"
 #include "../common/Stream.hpp"
 
 namespace sender {
-    struct SenderCtx {
-        size_t bytes_sent = 0;
-        size_t limit = (1024 * 1024 * 1024) / 8;
+    struct FileContext {
+        int fd = -1;
+        uint8_t *mappedRegion = nullptr;
+        size_t fileSize = 0;
+        std::atomic<uint64_t> nextOffset{0};
+
+        static constexpr size_t CHUNK_SIZE = 1024 * 1024;
+
+        explicit FileContext(const std::string &path) {
+            fd = open(path.c_str(), O_RDONLY);
+            if (fd == -1) {
+                spdlog::error("Failed to open file {}", path.c_str());
+                return;
+            }
+
+            struct stat statResult;
+            if (fstat(fd, &statResult) == -1) {
+                close(fd);
+                fd = -1;
+                return;
+            }
+            fileSize = statResult.st_size;
+
+            mappedRegion = (uint8_t *) mmap(nullptr, fileSize, PROT_READ, MAP_SHARED, fd, 0);
+            if (mappedRegion == MAP_FAILED) {
+                spdlog::error("Failed to map file {}", path.c_str());
+                close(fd);
+                fd = -1;
+                mappedRegion = nullptr;
+                return;
+            }
+
+            madvise(mappedRegion, fileSize, MADV_SEQUENTIAL);
+            madvise(mappedRegion, fileSize, MADV_WILLNEED);
+        }
+
+        ~FileContext() {
+            if (mappedRegion) {
+                munmap(mappedRegion, fileSize);
+                mappedRegion = nullptr;
+            }
+            if (fd != -1) {
+                close(fd);
+                fd = -1;
+            }
+        }
     };
+
+    struct SenderQuicConnectionContext : common::QuicConnectionContext {
+        std::string receiverId;
+        std::shared_ptr<FileContext> file;
+        std::shared_ptr<common::SenderTransferMetrics> senderMetrics;
+    };
+
+    struct SenderContext {
+        std::shared_ptr<FileContext> file;
+        uint64_t chunkStartOffset = 0;
+        uint32_t chunkLength = 0;
+        uint32_t chunkBytesSent = 0;
+
+        uint8_t headerBuf[16];
+
+        bool sendingHeader = false;
+
+        uint8_t headerBytesSent = 0;
+
+        bool getNextChunk() {
+            if (!file || !file->mappedRegion) {
+                return false;
+            }
+            const uint64_t offset = file->nextOffset.fetch_add(FileContext::CHUNK_SIZE);
+            //sent them all!
+            if (offset >= file->fileSize) return false;
+
+            chunkStartOffset = offset;
+
+            const uint64_t remaining = file->fileSize - offset;
+            chunkLength = std::min(static_cast<uint64_t>(FileContext::CHUNK_SIZE), remaining);
+
+            memcpy(headerBuf, &chunkStartOffset, sizeof(uint64_t));
+            memcpy(headerBuf + sizeof(uint64_t), &chunkLength, sizeof(uint32_t));
+            memset(headerBuf + 12, 0, 4);
+
+            sendingHeader = true;
+            headerBytesSent = 0;
+            chunkBytesSent = 0;
+            return true;
+        }
+    };
+
 
     class SenderStream : public common::Stream {
         inline static lsquic_stream_if streamCallbacks = {
             .on_new_conn = [](void *streamIfCtx, lsquic_conn_t *connection) -> lsquic_conn_ctx * {
                 auto *ctx = static_cast<common::QuicConnectionContext *>(lsquic_conn_get_peer_ctx(connection, nullptr));
                 ctx->connection = connection;
-                common::g_stats.start_sender();
                 lsquic_conn_make_stream(connection);
                 spdlog::info("QUIC connection established on ICE Component {}", ctx->componentId);
-
-
                 return reinterpret_cast<lsquic_conn_ctx *>(ctx);
             },
             .on_conn_closed = [](lsquic_conn_t *connection) {
@@ -38,52 +122,76 @@ namespace sender {
                 }
             },
 
-            .on_new_stream = [](void *stream_if_ctx, lsquic_stream_t *stream) {
+            .on_new_stream = [](void *stream_if_ctx, lsquic_stream_t *stream) -> lsquic_stream_ctx * {
+
+                auto *connCtx = reinterpret_cast<SenderQuicConnectionContext *>(lsquic_conn_get_ctx(
+                    lsquic_stream_conn(stream)));
+
                 lsquic_stream_wantwrite(stream, 1);
-                return (lsquic_stream_ctx_t *) new SenderCtx();
+                auto *ctx = new SenderContext();
+                ctx->file = connCtx->file;
+
+
+                if (!ctx->getNextChunk()) {
+                    lsquic_stream_shutdown(stream, 1);
+                }
+
+                return reinterpret_cast<lsquic_stream_ctx *>(ctx);
             },
             .on_read = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
                 char buf[1];
                 if (lsquic_stream_read(stream, buf, 1) == 0) {
-                    // EOF from server (usually means we are done)
                     lsquic_stream_close(stream);
                 }
             },
             .on_write = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
-                auto *ctx = (SenderCtx *) h;
-
-                while (ctx->bytes_sent < ctx->limit) {
-                    size_t remaining = ctx->limit - ctx->bytes_sent;
-                    size_t to_write = std::min(remaining, sizeof(common::JUNK_BUFFER));
-
-                    ssize_t nw = lsquic_stream_write(stream, common::JUNK_BUFFER, to_write);
-
-                    if (nw > 0) {
-                        ctx->bytes_sent += nw;
-                    } else if (nw == 0 || (nw == -1 && (errno == EWOULDBLOCK || errno == EAGAIN))) {
-                        // 1. nw == 0:  Engine accepted 0 bytes (Full).
-                        // 2. nw == -1: Engine returned explicit WOULDBLOCK error.
-                        // ACTION: Stop pushing, return, and wait for the next 'on_write' callback.
-                        break;
-                    } else {
-                        // Real Error (e.g., ECONNRESET, EPIPE)
-                        char errbuf[256];
-                        strerror_r(errno, errbuf, sizeof(errbuf));
-                        spdlog::error("Stream Write Fatal Error: {} (errno: {})", errbuf, errno);
-
-                        lsquic_stream_close(stream);
-                        return;
-                    }
+                auto *ctx = reinterpret_cast<SenderContext *>(h);
+                auto *connCtx = reinterpret_cast<SenderQuicConnectionContext *>(lsquic_conn_get_ctx(
+                    lsquic_stream_conn(stream)));
+                if (!ctx->file || !ctx->file->mappedRegion) {
+                    lsquic_stream_close(stream);
+                    return;
                 }
+                while (true) {
+                    if (ctx->sendingHeader) {
+                        size_t remaining = 16 - ctx->headerBytesSent;
+                        ssize_t nw = lsquic_stream_write(stream, ctx->headerBuf + ctx->headerBytesSent, remaining);
+                        if (nw <= 0) {
+                            return;
+                        }
+                        ctx->headerBytesSent += nw;
 
-                if (ctx->bytes_sent >= ctx->limit) {
-                    lsquic_stream_shutdown(stream, 1); // EOF (Write side)
-                    lsquic_stream_wantwrite(stream, 0); // Stop writing
+                        if (ctx->headerBytesSent == 16) {
+                            ctx->sendingHeader = false;
+                        } else {
+                            return;
+                        }
+                    } else {
+                        size_t remaining = ctx->chunkLength - ctx->chunkBytesSent;
+                        const uint8_t *ptr = ctx->file->mappedRegion + ctx->chunkStartOffset +
+                                             ctx->chunkBytesSent;
+                        ssize_t nw = lsquic_stream_write(stream, ptr, remaining);
+                        if (nw <= 0) {
+                            return;
+                        }
+
+                        ctx->chunkBytesSent += nw;
+                        connCtx->senderMetrics->bytesSent += nw;
+
+
+                        if (ctx->chunkBytesSent >= ctx->chunkLength) {
+                            if (!ctx->getNextChunk()) {
+                                lsquic_stream_shutdown(stream, 1);
+                                lsquic_stream_wantwrite(stream, 0);
+                                return;
+                            }
+                        }
+                    }
                 }
             },
             .on_close = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
-                auto *ctx = (SenderCtx *) h;
-                common::g_stats.finish_sender();
+                const auto *ctx = reinterpret_cast<SenderContext *>(h);
+
                 delete ctx;
             },
             .on_hsk_done = [](lsquic_conn_t *connection, enum lsquic_hsk_status status) {
@@ -105,7 +213,6 @@ namespace sender {
 
     public:
         static void initialize() {
-
             // common::init_lsquic_logging();
             sslCtx_ = createSslCtx();
             lsquic_global_init(LSQUIC_GLOBAL_CLIENT);
@@ -143,6 +250,11 @@ namespace sender {
         //assume this method will be invoked from gmainloop thread
         static void startTransfer(NiceAgent *agent, const guint streamId, GMainContext *niceContext, const int n,
                                   std::string receiverId) {
+            size_t fileSize = std::filesystem::file_size(SenderConfig::paths[0]);
+            const auto transferStats = std::make_shared<common::SenderTransferMetrics>(receiverId, fileSize);
+            common::senderMetrics[receiverId] = transferStats;
+            const auto fileContext = std::make_shared<FileContext>(SenderConfig::paths[0]);;
+
             for (int i = 1; i <= n; i++) {
                 setAndVerifySocketBuffers(agent, streamId, i, SenderConfig::udpBufferBytes);
 
@@ -153,14 +265,16 @@ namespace sender {
                 }
 
 
-                auto *ctx = new common::QuicConnectionContext();
+                auto *ctx = new SenderQuicConnectionContext();
                 ctx->agent = agent;
                 ctx->streamId = streamId;
                 ctx->componentId = i;
                 ctx->receiverId = receiverId;
+                ctx->file = fileContext;
+                ctx->senderMetrics = transferStats;
+
                 nice_address_copy_to_sockaddr(&local->base_addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
                 nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));
-
 
 
                 GSource *source = g_source_new(&common::quic_funcs, sizeof(common::QuicProcessSource));
@@ -212,9 +326,10 @@ namespace sender {
 
         static void disposeReceiverConnection(std::string_view receiverId) {
             std::vector<lsquic_conn_t *> toClose;
+            common::senderMetrics.erase(std::string(receiverId));
 
             for (const auto *ctx: connectionContexts_) {
-                if (ctx->receiverId == receiverId) {
+                if (((SenderQuicConnectionContext *) ctx)->receiverId == receiverId) {
                     toClose.push_back(ctx->connection);
                 }
             }
