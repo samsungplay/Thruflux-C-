@@ -10,93 +10,165 @@
 #include "../common/Stream.hpp"
 
 namespace sender {
-    struct FileContext {
+    struct MmapEntry {
         int fd = -1;
-        uint8_t *mappedRegion = nullptr;
-        size_t fileSize = 0;
-        std::atomic<uint64_t> nextOffset{0};
+        uint8_t *ptr = nullptr;
+        size_t size = 0;
+        std::list<uint32_t>::iterator lruIt;
 
-        static constexpr size_t CHUNK_SIZE = 1024 * 1024;
-
-        explicit FileContext(const std::string &path) {
+        MmapEntry(const std::string &path, size_t sz) : size(sz) {
             fd = open(path.c_str(), O_RDONLY);
-            if (fd == -1) {
-                spdlog::error("Failed to open file {}", path.c_str());
-                return;
+            if (fd != -1) {
+                ptr = static_cast<uint8_t *>(mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0));
+                if (ptr == MAP_FAILED) {
+                    spdlog::error("Failed to map file: {}", path);
+                    ptr = nullptr;
+                    close(fd);
+                    fd = -1;
+                } else {
+                    madvise(ptr, size, MADV_SEQUENTIAL);
+                    madvise(ptr, size, MADV_WILLNEED);
+                }
             }
-
-            struct stat statResult;
-            if (fstat(fd, &statResult) == -1) {
-                close(fd);
-                fd = -1;
-                return;
-            }
-            fileSize = statResult.st_size;
-
-            mappedRegion = (uint8_t *) mmap(nullptr, fileSize, PROT_READ, MAP_SHARED, fd, 0);
-            if (mappedRegion == MAP_FAILED) {
-                spdlog::error("Failed to map file {}", path.c_str());
-                close(fd);
-                fd = -1;
-                mappedRegion = nullptr;
-                return;
-            }
-
-            madvise(mappedRegion, fileSize, MADV_SEQUENTIAL);
-            madvise(mappedRegion, fileSize, MADV_WILLNEED);
         }
 
-        ~FileContext() {
-            if (mappedRegion) {
-                munmap(mappedRegion, fileSize);
-                mappedRegion = nullptr;
-            }
-            if (fd != -1) {
-                close(fd);
-                fd = -1;
-            }
+        ~MmapEntry() {
+            if (ptr) munmap(ptr, size);
+            if (fd != -1) close(fd);
         }
     };
+
+    struct TransferState {
+        struct FileInfo {
+            uint32_t id;
+            uint64_t size;
+            std::string path;
+            std::string relativePath;
+        };
+
+        bool receiverReady = false;
+        std::vector<lsquic_stream_t*> pendingStreams;
+
+        std::vector<FileInfo> files;
+        std::vector<uint8_t> manifestBlob;
+
+        size_t currentFileIndex = 0;
+        uint64_t currentFileOffset = 0;
+        bool manifestCreated = false;
+        size_t manifestSent = 0;
+
+
+        std::unordered_map<uint32_t, std::shared_ptr<MmapEntry> > mmaps;
+        std::list<uint32_t> lruList;
+        const size_t MAX_MMAPS = 16;
+
+        void init(const std::vector<std::string> &paths, const std::vector<std::string> &relativePaths) {
+            files.clear();
+            for (int i = 0; i < paths.size(); i++) {
+                files.push_back({
+                    static_cast<uint32_t>(i), std::filesystem::file_size(paths[i]),
+                    paths[i],relativePaths[i]
+                });
+            }
+            uint32_t count = files.size();
+            manifestBlob.resize(4);
+            memcpy(manifestBlob.data(), &count, 4);
+            for (const auto &f: files) {
+                size_t old = manifestBlob.size();
+                uint16_t nl = f.relativePath.size();
+                manifestBlob.resize(old + 14 + nl);
+                uint8_t *p = manifestBlob.data() + old;
+                memcpy(p, &f.id, 4);
+                p += 4;
+                memcpy(p, &f.size, 8);
+                p += 8;
+                memcpy(p, &nl, 2);
+                p += 2;
+                memcpy(p, f.relativePath.data(), nl);
+            }
+        }
+
+        std::shared_ptr<MmapEntry> getMmap(uint32_t id) {
+            auto it = mmaps.find(id);
+            if (it != mmaps.end()) {
+                lruList.splice(lruList.begin(), lruList, it->second->lruIt);
+                return it->second;
+            }
+            if (mmaps.size() >= MAX_MMAPS) {
+                uint32_t evict = lruList.back();
+                mmaps.erase(evict);
+                lruList.pop_back();
+            }
+            auto mf = std::make_shared<MmapEntry>(files[id].path, files[id].size);
+            if (mf->ptr) {
+                lruList.push_front(id);
+                mf->lruIt = lruList.begin();
+                mmaps[id] = mf;
+                return mf;
+            }
+            return nullptr;
+        }
+    };
+
 
     struct SenderQuicConnectionContext : common::QuicConnectionContext {
         std::string receiverId;
-        std::shared_ptr<FileContext> file;
+        std::shared_ptr<TransferState> state;
         std::shared_ptr<common::SenderTransferMetrics> senderMetrics;
+        bool controlStreamCreated = false;
     };
 
     struct SenderContext {
-        std::shared_ptr<FileContext> file;
-        uint64_t chunkStartOffset = 0;
-        uint32_t chunkLength = 0;
-        uint32_t chunkBytesSent = 0;
-
+        bool typeByteSent = false;
+        bool isControlStream = false;
+        std::shared_ptr<TransferState> state;
+        std::shared_ptr<MmapEntry> currentMmap;
+        uint32_t fileId = 0;
+        uint64_t offset = 0;
+        uint32_t len = 0;
+        uint32_t bytesSent = 0;
         uint8_t headerBuf[16];
-
         bool sendingHeader = false;
+        uint8_t headerSent = 0;
 
-        uint8_t headerBytesSent = 0;
 
-        bool getNextChunk() {
-            if (!file || !file->mappedRegion) {
-                return false;
+        bool loadNextChunk() {
+            while (true) {
+                if (state->currentFileIndex >= state->files.size()) {
+                    return false;
+                }
+
+                auto &f = state->files[state->currentFileIndex];
+                uint64_t off = state->currentFileOffset;
+
+                state->currentFileOffset += 1024 * 1024;
+
+                if (off >= f.size) {
+                    state->currentFileIndex++;
+                    state->currentFileOffset = 0;
+                    continue;
+                }
+
+                fileId = f.id;
+                offset = off;
+                len = std::min(static_cast<uint64_t>(1024) * 1024, f.size - off);
+                bytesSent = 0;
+
+                currentMmap = state->getMmap(fileId);
+
+                if (!currentMmap) {
+                    spdlog::error("Failed to mmap file ID {}: {}", fileId, f.path);
+                    return false;
+                }
+
+                memcpy(headerBuf, &offset, 8);
+                memcpy(headerBuf + 8, &len, 4);
+                memcpy(headerBuf + 12, &fileId, 4);
+
+                sendingHeader = true;
+                headerSent = 0;
+                return true;
             }
-            const uint64_t offset = file->nextOffset.fetch_add(FileContext::CHUNK_SIZE);
-            //sent them all!
-            if (offset >= file->fileSize) return false;
-
-            chunkStartOffset = offset;
-
-            const uint64_t remaining = file->fileSize - offset;
-            chunkLength = std::min(static_cast<uint64_t>(FileContext::CHUNK_SIZE), remaining);
-
-            memcpy(headerBuf, &chunkStartOffset, sizeof(uint64_t));
-            memcpy(headerBuf + sizeof(uint64_t), &chunkLength, sizeof(uint32_t));
-            memset(headerBuf + 12, 0, 4);
-
-            sendingHeader = true;
-            headerBytesSent = 0;
-            chunkBytesSent = 0;
-            return true;
         }
     };
 
@@ -104,10 +176,17 @@ namespace sender {
     class SenderStream : public common::Stream {
         inline static lsquic_stream_if streamCallbacks = {
             .on_new_conn = [](void *streamIfCtx, lsquic_conn_t *connection) -> lsquic_conn_ctx * {
-                auto *ctx = static_cast<common::QuicConnectionContext *>(lsquic_conn_get_peer_ctx(connection, nullptr));
+                auto *ctx = static_cast<SenderQuicConnectionContext *>(lsquic_conn_get_peer_ctx(connection, nullptr));
                 ctx->connection = connection;
                 lsquic_conn_make_stream(connection);
+                if (ctx->componentId == 1) {
+                    //open control stream
+                    lsquic_conn_make_stream(connection);
+                }
                 spdlog::info("QUIC connection established on ICE Component {}", ctx->componentId);
+                if (!common::senderMetrics[ctx->receiverId]->started) {
+                    common::senderMetrics[ctx->receiverId]->started = true;
+                }
                 return reinterpret_cast<lsquic_conn_ctx *>(ctx);
             },
             .on_conn_closed = [](lsquic_conn_t *connection) {
@@ -123,68 +202,125 @@ namespace sender {
             },
 
             .on_new_stream = [](void *stream_if_ctx, lsquic_stream_t *stream) -> lsquic_stream_ctx * {
-
                 auto *connCtx = reinterpret_cast<SenderQuicConnectionContext *>(lsquic_conn_get_ctx(
                     lsquic_stream_conn(stream)));
 
+
                 lsquic_stream_wantwrite(stream, 1);
                 auto *ctx = new SenderContext();
-                ctx->file = connCtx->file;
+                ctx->state = connCtx->state;
 
+                if (connCtx->componentId == 1 && !connCtx->controlStreamCreated) {
+                    ctx->isControlStream = true;
+                    connCtx->controlStreamCreated = true;
+                } else {
+                    ctx->isControlStream = false;
 
-                if (!ctx->getNextChunk()) {
-                    lsquic_stream_shutdown(stream, 1);
+                    if (!ctx->loadNextChunk()) {
+                        lsquic_stream_shutdown(stream, 1);
+                    }
                 }
+
 
                 return reinterpret_cast<lsquic_stream_ctx *>(ctx);
             },
             .on_read = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
-                char buf[1];
-                if (lsquic_stream_read(stream, buf, 1) == 0) {
-                    lsquic_stream_close(stream);
+                auto *ctx = reinterpret_cast<SenderContext *>(h);
+                if (ctx->isControlStream) {
+                    uint8_t buf[1];
+                    if (lsquic_stream_read(stream, buf, 1) == 1) {
+                        if (buf[0] == 0x06) {
+                            spdlog::info("Receiver ACK received. Blasting data...");
+                            ctx->state->receiverReady = true;
+                            for (auto* s : ctx->state->pendingStreams) {
+                                lsquic_stream_wantwrite(s, 1);
+                            }
+                            ctx->state->pendingStreams.clear();
+                        }
+                    }
                 }
             },
             .on_write = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
                 auto *ctx = reinterpret_cast<SenderContext *>(h);
-                auto *connCtx = reinterpret_cast<SenderQuicConnectionContext *>(lsquic_conn_get_ctx(
-                    lsquic_stream_conn(stream)));
-                if (!ctx->file || !ctx->file->mappedRegion) {
-                    lsquic_stream_close(stream);
+
+                if (!ctx->typeByteSent) {
+                    uint8_t tag = ctx->isControlStream ? 0x00 : 0x01;
+                    ssize_t nw = lsquic_stream_write(stream, &tag, 1);
+                    if (nw > 0) {
+                        ctx->typeByteSent = true;
+                    } else {
+                        return;
+                    }
                     return;
                 }
+
+                auto *connCtx = reinterpret_cast<SenderQuicConnectionContext *>(lsquic_conn_get_ctx(
+                    lsquic_stream_conn(stream)));
+
+                if (ctx->isControlStream) {
+                    size_t total = ctx->state->manifestBlob.size();
+                    size_t sent = ctx->state->manifestSent;
+                    if (sent < total) {
+                        ssize_t nw = lsquic_stream_write(stream, ctx->state->manifestBlob.data() + sent, total - sent);
+                        if (nw > 0) ctx->state->manifestSent += nw;
+                    }
+
+                    if (ctx->state->manifestSent == total) {
+                        lsquic_stream_flush(stream);
+                        lsquic_stream_shutdown(stream, 1);
+                        lsquic_stream_wantread(stream, 1);
+                    }
+                    return;
+                }
+
+                //queue up streams until control stream handshake completes
+                if (!ctx->state->receiverReady) {
+                    ctx->state->pendingStreams.push_back(stream);
+                    lsquic_stream_wantwrite(stream, 0);
+                    return;
+                }
+
                 while (true) {
                     if (ctx->sendingHeader) {
-                        size_t remaining = 16 - ctx->headerBytesSent;
-                        ssize_t nw = lsquic_stream_write(stream, ctx->headerBuf + ctx->headerBytesSent, remaining);
+                        size_t remaining = 16 - ctx->headerSent;
+                        ssize_t nw = lsquic_stream_write(stream, ctx->headerBuf + ctx->headerSent, remaining);
                         if (nw <= 0) {
                             return;
                         }
-                        ctx->headerBytesSent += nw;
+                        ctx->headerSent += nw;
 
-                        if (ctx->headerBytesSent == 16) {
+                        if (ctx->headerSent == 16) {
                             ctx->sendingHeader = false;
                         } else {
                             return;
                         }
                     } else {
-                        size_t remaining = ctx->chunkLength - ctx->chunkBytesSent;
-                        const uint8_t *ptr = ctx->file->mappedRegion + ctx->chunkStartOffset +
-                                             ctx->chunkBytesSent;
+                        if (!ctx->currentMmap) {
+                            spdlog::error("Unexpected error: currentMmap missing for QUIC connection {}",
+                                          connCtx->componentId);
+                            lsquic_stream_close(stream);
+                            return;
+                        }
+                        size_t remaining = ctx->len - ctx->bytesSent;
+                        const uint8_t *ptr = ctx->currentMmap->ptr + ctx->offset +
+                                             ctx->bytesSent;
                         ssize_t nw = lsquic_stream_write(stream, ptr, remaining);
                         if (nw <= 0) {
                             return;
                         }
 
-                        ctx->chunkBytesSent += nw;
+                        ctx->bytesSent += nw;
                         connCtx->senderMetrics->bytesSent += nw;
 
 
-                        if (ctx->chunkBytesSent >= ctx->chunkLength) {
-                            if (!ctx->getNextChunk()) {
+                        if (ctx->bytesSent >= ctx->len) {
+                            ctx->currentMmap = nullptr;
+                            if (!ctx->loadNextChunk()) {
                                 lsquic_stream_shutdown(stream, 1);
                                 lsquic_stream_wantwrite(stream, 0);
                                 return;
                             }
+
                         }
                     }
                 }
@@ -253,7 +389,8 @@ namespace sender {
             size_t fileSize = std::filesystem::file_size(SenderConfig::paths[0]);
             const auto transferStats = std::make_shared<common::SenderTransferMetrics>(receiverId, fileSize);
             common::senderMetrics[receiverId] = transferStats;
-            const auto fileContext = std::make_shared<FileContext>(SenderConfig::paths[0]);;
+            const auto state = std::make_shared<TransferState>();
+            state->init(SenderStateHolder::getAbsolutePaths(), SenderStateHolder::getRelativePaths());
 
             for (int i = 1; i <= n; i++) {
                 setAndVerifySocketBuffers(agent, streamId, i, SenderConfig::udpBufferBytes);
@@ -270,7 +407,7 @@ namespace sender {
                 ctx->streamId = streamId;
                 ctx->componentId = i;
                 ctx->receiverId = receiverId;
-                ctx->file = fileContext;
+                ctx->state = state;
                 ctx->senderMetrics = transferStats;
 
                 nice_address_copy_to_sockaddr(&local->base_addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));

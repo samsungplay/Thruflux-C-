@@ -15,7 +15,7 @@ int main(const int argc, char **argv) {
     boost::asio::io_context uiIo;
     auto worker = boost::asio::make_work_guard(uiIo);
     auto benchmarker = std::make_shared<common::Benchmarker>(uiIo, false);
-    benchmarker->start();
+    benchmarker->initialize();
     boost::asio::post(common::Worker::uiWorker(), [&uiIo] {
         uiIo.run();
     });

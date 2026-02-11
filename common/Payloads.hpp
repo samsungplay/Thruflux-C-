@@ -50,12 +50,11 @@ namespace common {
     struct CreateTransferSessionPayload {
         std::string type = "create_transfer_session_payload";
         int maxReceivers = 0;
-        std::vector<std::string> paths;
         std::uint64_t totalSize;
         int filesCount;
     };
 
-    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CreateTransferSessionPayload, type, maxReceivers, paths, totalSize, filesCount);
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CreateTransferSessionPayload, type, maxReceivers, totalSize, filesCount);
 
     struct CreatedTransferSessionPayload {
         std::string type = "created_transfer_session_payload";

@@ -68,7 +68,6 @@ namespace sender {
                                         SenderConfig::paths,
                                         SenderConfig::maxReceivers
                                     );
-                            SenderStateHolder::setManifest(createTransferSessionPayload);
                             socket.send(nlohmann::json(createTransferSessionPayload).dump());
                         } catch (const std::exception &e) {
                             spdlog::error("Failed to prepare transfer session: {}", e.what());

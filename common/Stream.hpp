@@ -13,9 +13,60 @@
 
 namespace common {
 
+    static constexpr uint64_t CONTROL_STREAM_ID = 2;
 
+    struct FileHandleCache {
+        struct Entry {
+            int fd;
+            uint64_t lastUsed;
+        };
 
+        std::unordered_map<uint32_t, Entry> openFiles;
+        std::unordered_map<uint32_t, std::string> paths;
+        const size_t MAX_FDS = 64;
+        uint64_t accessCounter = 0;
 
+        void registerPath(uint32_t id, const std::string &p) {
+            paths[id] = p;
+        }
+
+        int get(uint32_t id, int flags, mode_t mode = 0) {
+            accessCounter++;
+            if (openFiles.contains(id)) {
+                openFiles[id].lastUsed = accessCounter;
+                return openFiles[id].fd;
+            }
+
+            if (openFiles.size() >= MAX_FDS) {
+                uint32_t evictId = 0;
+                uint64_t minT = UINT64_MAX;
+                for (const auto &[fd, lastUsed]: openFiles | std::views::values) {
+                    if (lastUsed < minT) {
+                        minT = lastUsed;
+                        evictId = fd;
+                    }
+                }
+                close(openFiles[evictId].fd);
+                openFiles.erase(evictId);
+            }
+
+            const int fd = open(paths[id].c_str(), flags, mode);
+            if (fd == -1) {
+                spdlog::error("Failed to open file: {}, {}", id, errno);
+                return -1;
+            }
+
+            openFiles[id] = {fd, accessCounter};
+
+            return fd;
+        }
+
+        ~FileHandleCache() {
+            for (auto &[fd, lastUsed]: openFiles | std::views::values) {
+                close(fd);
+            }
+        }
+    };
 
 
     struct QuicConnectionContext {
@@ -29,7 +80,6 @@ namespace common {
     };
 
     static int spdlog_log_buf(void *ctx, const char *buf, size_t len) {
-
         std::string msg(buf, len);
 
         if (!msg.empty() && msg.back() == '\n') {
@@ -53,8 +103,6 @@ namespace common {
 
     class Stream {
     protected:
-
-
         inline static lsquic_engine_t *engine_;
         inline static std::vector<QuicConnectionContext *> connectionContexts_;
         inline static SSL_CTX *sslCtx_ = nullptr;

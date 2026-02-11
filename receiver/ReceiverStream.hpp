@@ -14,35 +14,43 @@
 
 
 namespace receiver {
-    struct FileContext {
-        int fd = -1;
-        std::atomic<size_t> bytesWritten{0};
-        std::string path;
-        size_t fileSize = 0;
+    struct ReceiverState {
+        common::FileHandleCache cache;
+        std::vector<uint8_t> manifestBuf;
+        bool manifestParsed = false;
 
+        void parseManifest() {
+            uint8_t *p = manifestBuf.data();
+            uint32_t count;
+            memcpy(&count, p, 4);
+            p += 4;
+            for (int i = 0; i < count; i++) {
+                uint32_t id;
+                memcpy(&id, p, 4);
+                p += 4;
+                uint64_t sz;
+                memcpy(&sz, p, 8);
+                p += 8;
+                uint16_t l;
+                memcpy(&l, p, 2);
+                p += 2;
+                std::string relativePath(reinterpret_cast<char *>(p), l);
+                p += l;
 
-        explicit FileContext(const std::string &path) : path{path} {
-            fd = open(path.c_str(), O_WRONLY | O_CREAT, 0644);
-            if (fd == -1) {
-                spdlog::error("Failed to open file for writing : {}", path);
-                return;
+                std::filesystem::path full = std::filesystem::path(ReceiverConfig::out) / relativePath;
+                std::filesystem::create_directories(full.parent_path());
+                cache.registerPath(id, full.string());
             }
-
-        }
-
-        ~FileContext() {
-            if (fd != -1) {
-                fsync(fd);
-                close(fd);
-                fd = -1;
-                spdlog::info("File context closed - written {} bytes", bytesWritten.load());
-            }
+            manifestParsed = true;
+            spdlog::info("Manifest parsed. {} files.", count);
         }
     };
 
-    inline std::shared_ptr<FileContext> currentFile;
+    inline std::shared_ptr<ReceiverState> receiverState;
 
     struct ReceiverContext {
+        enum StreamType { UNKNOWN, CONTROL, DATA } type = UNKNOWN;
+
         bool readingHeader = true;
 
         uint8_t headerBuf[16];
@@ -51,6 +59,7 @@ namespace receiver {
         uint64_t chunkOffset = 0;
         uint32_t chunkLength = 0;
         uint32_t bodyBytesRead = 0;
+        uint32_t fileId = 0;
         alignas(4096) uint8_t writeBuffer[65536];
     };
 
@@ -103,6 +112,9 @@ namespace receiver {
                 ctx->connection = c;
                 spdlog::info("New QUIC connection on ICE Comp {}", ctx->componentId);
 
+                if (!common::receiverMetrics.started) {
+                    common::receiverMetrics.started = true;
+                }
 
                 return reinterpret_cast<lsquic_conn_ctx *>(ctx);
             },
@@ -120,10 +132,38 @@ namespace receiver {
             },
             .on_read = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
                 auto *ctx = reinterpret_cast<ReceiverContext *>(h);
-                if (!currentFile || currentFile->fd == -1) {
-                    lsquic_stream_close(stream);
+
+                if (ctx->type == ReceiverContext::UNKNOWN) {
+                    uint8_t tag;
+                    if (lsquic_stream_read(stream, &tag, 1) == 1) {
+                        ctx->type = (tag == 0x00) ? ReceiverContext::CONTROL : ReceiverContext::DATA;
+                        spdlog::info("Stream {} identified as type {}", lsquic_stream_id(stream), tag);
+                    } else {
+                        return;
+                    }
                     return;
                 }
+
+                if (ctx->type == ReceiverContext::CONTROL) {
+                    uint8_t tmp[4096];
+                    ssize_t nr = lsquic_stream_read(stream, tmp, sizeof(tmp));
+                    if (nr > 0) receiverState->manifestBuf.insert(receiverState->manifestBuf.end(), tmp, tmp + nr);
+                    if (nr == 0 && !receiverState->manifestParsed) {
+                        receiverState->parseManifest();
+                        const uint8_t ack = 0x06;
+                        lsquic_stream_write(stream, &ack, 1);
+                        lsquic_stream_flush(stream);
+                        lsquic_stream_shutdown(stream, 1);
+                    }
+
+                    return;
+                }
+
+                if (!receiverState->manifestParsed) {
+                    //wait until manifest gets parsed
+                    return;
+                }
+
                 while (true) {
                     if (ctx->readingHeader) {
                         size_t remaining = 16 - ctx->headerBytesRead;
@@ -137,6 +177,7 @@ namespace receiver {
                         if (ctx->headerBytesRead == 16) {
                             memcpy(&ctx->chunkOffset, ctx->headerBuf, 8);
                             memcpy(&ctx->chunkLength, ctx->headerBuf + 8, 4);
+                            memcpy(&ctx->fileId, ctx->headerBuf + 12, 4);
 
                             ctx->readingHeader = false;
                             ctx->bodyBytesRead = 0;
@@ -151,9 +192,16 @@ namespace receiver {
                             return;
                         }
 
+                        const int fd = receiverState->cache.get(ctx->fileId, O_WRONLY | O_CREAT, 0644);
+                        if (fd == -1) {
+                            spdlog::error("Unexpected error: Could not get fd");
+                            lsquic_stream_close(stream);
+                            return;
+                        }
+
                         common::receiverMetrics.bytesReceived += nr;
                         uint64_t writePos = ctx->chunkOffset + ctx->bodyBytesRead;
-                        ssize_t nw = pwrite(currentFile->fd, ctx->writeBuffer, nr, writePos);
+                        ssize_t nw = pwrite(fd, ctx->writeBuffer, nr, writePos);
 
                         if (nw < 0) {
                             spdlog::error("Could not write to disk: {}", errno);
@@ -162,7 +210,6 @@ namespace receiver {
                         }
 
                         ctx->bodyBytesRead += nr;
-                        currentFile->bytesWritten += nr;
 
                         if (ctx->bodyBytesRead >= ctx->chunkLength) {
                             ctx->readingHeader = true;
@@ -223,9 +270,8 @@ namespace receiver {
 
 
         static void receiveTransfer(NiceAgent *agent, const guint streamId, GMainContext *niceContext, const int n) {
-            if (!currentFile) {
-                const std::filesystem::path parentDir = ReceiverConfig::out;
-                currentFile = std::make_shared<FileContext>(parentDir / "out.bin");
+            if (!receiverState) {
+                receiverState = std::make_shared<ReceiverState>();
             }
             for (int i = 1; i <= n; i++) {
                 setAndVerifySocketBuffers(agent, streamId, i, ReceiverConfig::udpBufferBytes);

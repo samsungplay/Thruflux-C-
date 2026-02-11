@@ -72,16 +72,25 @@ namespace sender {
         inline static std::unordered_map<std::string, std::shared_ptr<ReceiverInfo> > receivers_;
         inline static std::mutex mutex;
         inline static std::string joinCode_;
+        inline static std::vector<std::string> absolutePaths_;
+        inline static std::vector<std::string> relativePaths_;
 
     public:
-        static void setManifest(common::CreateTransferSessionPayload manifest) {
+        static void setAbsolutePaths(std::vector<std::string> paths) {
             std::lock_guard lock(mutex);
-            manifest_ = std::move(manifest);
+            absolutePaths_ = std::move(paths);
+        }
+        static void setRelativePaths(std::vector<std::string> paths) {
+            std::lock_guard lock(mutex);
+            relativePaths_ = std::move(paths);
         }
 
-        static common::CreateTransferSessionPayload manifest() {
-            std::lock_guard lock(mutex);
-            return manifest_;
+        static std::vector<std::string>& getAbsolutePaths() {
+            return absolutePaths_;
+        }
+
+        static std::vector<std::string>& getRelativePaths() {
+            return relativePaths_;
         }
 
         static void addReceiver(std::string receiverId) {

@@ -15,6 +15,7 @@ namespace common {
         double ewmaMbps = 0.0;
         double totalMbpsSum = 0.0;
         size_t samplesCount = 0;
+        bool started = false;
 
         explicit SenderTransferMetrics(std::string name, const size_t size) : receiverId(std::move(name)),
                                                                               totalSize(size) {
@@ -29,6 +30,7 @@ namespace common {
         double ewmaMbps = 0.0;
         double totalMbpsSum = 0.0;
         size_t samplesCount = 0;
+        bool started = false;
     };
 
     inline ReceiverMetrics receiverMetrics;
@@ -36,16 +38,19 @@ namespace common {
     class Benchmarker : public std::enable_shared_from_this<Benchmarker> {
         boost::asio::steady_timer timer_;
         bool isSender_;
-        double averageMbps;
+        double averageMbps = 0.0;
 
     public:
         Benchmarker(boost::asio::io_context &io, const bool isSender)
             : timer_(io), isSender_(isSender) {
         }
 
-        void start() {
+        void initialize() {
             printLoop();
         }
+
+
+
 
     private:
         inline static boost::asio::io_context ioContext_;
