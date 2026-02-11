@@ -187,36 +187,47 @@ namespace receiver {
                         }
                     } else {
 
-                        size_t remaining = ctx->chunkLength - ctx->bodyBytesRead;
-                        size_t readSize = std::min(sizeof(ctx->writeBuffer), remaining);
-                        ssize_t nr = lsquic_stream_read(stream, ctx->writeBuffer, readSize);
-                        if (nr <= 0) {
-                            return;
+                        // BUFFERING LOGIC
+                        size_t chunkRemaining = ctx->chunkLength - ctx->bodyBytesRead;
+                        size_t bufferSpace = sizeof(ctx->writeBuffer);
+
+                        // We need to fill the buffer as much as possible
+                        // But we MUST flush to disk if:
+                        // 1. Buffer is full
+                        // 2. We finished the current chunk
+                        // 3. lsquic has no more data (nr == -1)
+
+                        size_t buffered = 0;
+                        bool streamEmpty = false;
+
+                        while (buffered < bufferSpace && buffered < chunkRemaining) {
+                            ssize_t nr = lsquic_stream_read(stream, ctx->writeBuffer + buffered,
+                                                            std::min(bufferSpace, chunkRemaining) - buffered);
+                            if (nr == 0) { streamEmpty = true; break; } // EOF
+                            if (nr < 0) { streamEmpty = true; break; }  // EWOULDBLOCK / Error
+
+                            buffered += nr;
                         }
 
-                        const int fd = receiverState->cache.get(ctx->fileId, O_WRONLY | O_CREAT, 0644);
-                        if (fd == -1) {
-                            spdlog::error("Unexpected error: Could not get fd");
-                            lsquic_stream_close(stream);
-                            return;
+                        // FLUSH to disk
+                        if (buffered > 0) {
+                            int fd = receiverState->cache.get(ctx->fileId, O_WRONLY | O_CREAT, 0644);
+                            if (fd != -1) {
+                                pwrite(fd, ctx->writeBuffer, buffered, ctx->chunkOffset + ctx->bodyBytesRead);
+                            }
+                            ctx->bodyBytesRead += buffered;
                         }
 
-                        common::receiverMetrics.bytesReceived += nr;
-                        uint64_t writePos = ctx->chunkOffset + ctx->bodyBytesRead;
-                        ssize_t nw = pwrite(fd, ctx->writeBuffer, nr, writePos);
-
-                        if (nw < 0) {
-                            spdlog::error("Could not write to disk: {}", errno);
-                            lsquic_stream_close(stream);
-                            return;
-                        }
-
-                        ctx->bodyBytesRead += nr;
-
+                        // CHECK STATE
                         if (ctx->bodyBytesRead >= ctx->chunkLength) {
-                            ctx->readingHeader = true;
+                            ctx->readingHeader = true; // Chunk Done
                             ctx->headerBytesRead = 0;
+                            // IMPORTANT: Loop again immediately to read next header if data exists!
+                            continue;
                         }
+
+                        // If stream is empty (EWOULDBLOCK), we must return to event loop
+                        if (streamEmpty) return;
                     }
                 }
             },
