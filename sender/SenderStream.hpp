@@ -283,7 +283,16 @@ namespace sender {
                     return;
                 }
 
+                static constexpr int BATCH_SIZE = 32 * 1024;
+                int bytesWrittenThisTick = 0;
+
                 while (true) {
+
+                    if (bytesWrittenThisTick >= BATCH_SIZE) {
+                        lsquic_stream_wantwrite(stream, 1);
+                        return;
+                    }
+
                     if (ctx->sendingHeader) {
                         size_t remaining = 16 - ctx->headerSent;
                         ssize_t nw = lsquic_stream_write(stream, ctx->headerBuf + ctx->headerSent, remaining);
@@ -291,6 +300,7 @@ namespace sender {
                             return;
                         }
                         ctx->headerSent += nw;
+                        bytesWrittenThisTick += nw;
 
                         if (ctx->headerSent == 16) {
                             ctx->sendingHeader = false;
@@ -314,6 +324,7 @@ namespace sender {
 
                         ctx->bytesSent += nw;
                         connCtx->senderMetrics->bytesSent += nw;
+                        bytesWrittenThisTick += nw;
 
 
                         if (ctx->bytesSent >= ctx->len) {
