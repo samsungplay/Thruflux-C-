@@ -112,9 +112,7 @@ namespace receiver {
                 ctx->connection = c;
                 spdlog::info("New QUIC connection on ICE Comp {}", ctx->componentId);
 
-                if (!common::receiverMetrics.started) {
-                    common::receiverMetrics.started = true;
-                }
+
 
                 return reinterpret_cast<lsquic_conn_ctx *>(ctx);
             },
@@ -154,6 +152,9 @@ namespace receiver {
                         lsquic_stream_write(stream, &ack, 1);
                         lsquic_stream_flush(stream);
                         lsquic_stream_shutdown(stream, 1);
+                        if (!common::receiverMetrics.started) {
+                            common::receiverMetrics.started = true;
+                        }
                     }
 
                     return;

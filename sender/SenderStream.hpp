@@ -47,7 +47,7 @@ namespace sender {
         };
 
         bool receiverReady = false;
-        std::vector<lsquic_stream_t*> pendingStreams;
+        std::vector<lsquic_stream_t *> pendingStreams;
 
         std::vector<FileInfo> files;
         std::vector<uint8_t> manifestBlob;
@@ -67,7 +67,7 @@ namespace sender {
             for (int i = 0; i < paths.size(); i++) {
                 files.push_back({
                     static_cast<uint32_t>(i), std::filesystem::file_size(paths[i]),
-                    paths[i],relativePaths[i]
+                    paths[i], relativePaths[i]
                 });
             }
             uint32_t count = files.size();
@@ -184,9 +184,7 @@ namespace sender {
                     lsquic_conn_make_stream(connection);
                 }
                 spdlog::info("QUIC connection established on ICE Component {}", ctx->componentId);
-                if (!common::senderMetrics[ctx->receiverId]->started) {
-                    common::senderMetrics[ctx->receiverId]->started = true;
-                }
+
                 return reinterpret_cast<lsquic_conn_ctx *>(ctx);
             },
             .on_conn_closed = [](lsquic_conn_t *connection) {
@@ -226,13 +224,19 @@ namespace sender {
             },
             .on_read = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
                 auto *ctx = reinterpret_cast<SenderContext *>(h);
+                auto *connCtx = reinterpret_cast<SenderQuicConnectionContext *>(lsquic_conn_get_ctx(
+                    lsquic_stream_conn(stream)));
+
                 if (ctx->isControlStream) {
                     uint8_t buf[1];
                     if (lsquic_stream_read(stream, buf, 1) == 1) {
                         if (buf[0] == 0x06) {
-                            spdlog::info("Receiver ACK received. Blasting data...");
+                            //Receiver ACK received. Time to blast data!
+                            if (!common::senderMetrics[connCtx->receiverId]->started) {
+                                common::senderMetrics[connCtx->receiverId]->started = true;
+                            }
                             ctx->state->receiverReady = true;
-                            for (auto* s : ctx->state->pendingStreams) {
+                            for (auto *s: ctx->state->pendingStreams) {
                                 lsquic_stream_wantwrite(s, 1);
                             }
                             ctx->state->pendingStreams.clear();
@@ -320,7 +324,6 @@ namespace sender {
                                 lsquic_stream_wantwrite(stream, 0);
                                 return;
                             }
-
                         }
                     }
                 }
