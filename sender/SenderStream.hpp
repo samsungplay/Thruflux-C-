@@ -494,11 +494,10 @@ namespace sender {
                                                                    (sockaddr *) &c->remoteAddr,
                                                                    c, 0);
 
-                                           if (!processScheduled) {
-                                               processScheduled = true;
-                                               g_idle_add_full(
-                                                   G_PRIORITY_HIGH_IDLE, GSourceFunc(processWhenIdle), nullptr,
-                                                   nullptr);
+                                           static int packetsSinceProcess = 0;
+                                           if (++packetsSinceProcess >= 64) {
+                                               packetsSinceProcess = 0;
+                                               process();
                                            }
                                        },
                                        ctx

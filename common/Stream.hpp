@@ -105,13 +105,7 @@ namespace common {
         inline static lsquic_engine_t *engine_;
         inline static std::vector<QuicConnectionContext *> connectionContexts_;
         inline static SSL_CTX *sslCtx_ = nullptr;
-        inline static bool processScheduled = false;
 
-        static gboolean processWhenIdle() {
-            process();
-            processScheduled = false;
-            return G_SOURCE_REMOVE;
-        }
 
         static gboolean engineTick(gpointer data) {
             if (!engine_) return G_SOURCE_REMOVE;
