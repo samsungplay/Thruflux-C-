@@ -113,14 +113,16 @@ namespace common {
             process();
 
             int diff;
-
             if (lsquic_engine_earliest_adv_tick(engine_, &diff)) {
                 if (diff <= 0) {
                     g_idle_add_full(G_PRIORITY_HIGH_IDLE, engineTick, nullptr, nullptr);
                 } else {
                     g_timeout_add_full(G_PRIORITY_HIGH, (guint)((diff + 999) / 1000), engineTick, nullptr, nullptr);
                 }
+            } else {
+                g_timeout_add_full(G_PRIORITY_HIGH, 100, engineTick, nullptr, nullptr);
             }
+
             return G_SOURCE_REMOVE;
         }
 
