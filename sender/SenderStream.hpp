@@ -283,7 +283,7 @@ namespace sender {
                     return;
                 }
 
-                static constexpr int BATCH_SIZE = 32 * 1024;
+                static constexpr int BATCH_SIZE = 256 * 1024;
                 int bytesWrittenThisTick = 0;
 
                 while (true) {
