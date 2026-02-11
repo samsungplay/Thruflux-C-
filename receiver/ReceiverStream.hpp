@@ -188,35 +188,30 @@ namespace receiver {
                     } else {
 
                         size_t remaining = ctx->chunkLength - ctx->bodyBytesRead;
-                        size_t bufferSpace = sizeof(ctx->writeBuffer);
-                        size_t buffered = 0;
-
-                        while (buffered < bufferSpace && buffered < remaining) {
-                            ssize_t nr = lsquic_stream_read(stream, ctx->writeBuffer + buffered,
-                                                            std::min(bufferSpace, remaining) - buffered);
-                            if (nr <= 0) break;
-                            buffered += nr;
+                        size_t readSize = std::min(sizeof(ctx->writeBuffer), remaining);
+                        ssize_t nr = lsquic_stream_read(stream, ctx->writeBuffer, readSize);
+                        if (nr <= 0) {
+                            return;
                         }
 
-                        if (buffered > 0) {
-                            const int fd = receiverState->cache.get(ctx->fileId, O_WRONLY | O_CREAT, 0644);
-                            if (fd != -1) {
-                                 ssize_t nw = pwrite(fd, ctx->writeBuffer, buffered, ctx->chunkOffset + ctx->bodyBytesRead);
-                                if (nw < 0) {
-                                    spdlog::error("Could not write to disk: {}", errno);
-                                    lsquic_stream_close(stream);
-                                    return;
-                                }
-                            }
-                            else {
-                                spdlog::error("Unexpected error: Could not get fd");
-                                lsquic_stream_close(stream);
-                                return;
-                            }
-                            ctx->bodyBytesRead += buffered;
-                            common::receiverMetrics.bytesReceived += buffered;
+                        const int fd = receiverState->cache.get(ctx->fileId, O_WRONLY | O_CREAT, 0644);
+                        if (fd == -1) {
+                            spdlog::error("Unexpected error: Could not get fd");
+                            lsquic_stream_close(stream);
+                            return;
                         }
 
+                        common::receiverMetrics.bytesReceived += nr;
+                        uint64_t writePos = ctx->chunkOffset + ctx->bodyBytesRead;
+                        ssize_t nw = pwrite(fd, ctx->writeBuffer, nr, writePos);
+
+                        if (nw < 0) {
+                            spdlog::error("Could not write to disk: {}", errno);
+                            lsquic_stream_close(stream);
+                            return;
+                        }
+
+                        ctx->bodyBytesRead += nr;
 
                         if (ctx->bodyBytesRead >= ctx->chunkLength) {
                             ctx->readingHeader = true;
