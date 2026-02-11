@@ -119,21 +119,14 @@ namespace common {
             process();
 
             int diff;
-            guint intervalMs = 100;
 
             if (lsquic_engine_earliest_adv_tick(engine_, &diff)) {
-                if (diff < 0) {
-                    intervalMs = 0;
+                if (diff <= 0) {
+                    g_idle_add_full(G_PRIORITY_HIGH_IDLE, engineTick, nullptr, nullptr);
                 } else {
-                    intervalMs = static_cast<guint>((diff + 999) / 1000);
+                    g_timeout_add_full(G_PRIORITY_HIGH, (guint)((diff + 999) / 1000), engineTick, nullptr, nullptr);
                 }
             }
-
-            if (intervalMs == 0) intervalMs = 1;
-
-
-            g_timeout_add_full(G_PRIORITY_HIGH, intervalMs, engineTick, nullptr, nullptr);
-
             return G_SOURCE_REMOVE;
         }
 
