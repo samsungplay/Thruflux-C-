@@ -27,7 +27,6 @@ namespace sender {
                     fd = -1;
                 } else {
                     madvise(ptr, size, MADV_SEQUENTIAL);
-                    madvise(ptr, size, MADV_WILLNEED);
                 }
             }
         }
