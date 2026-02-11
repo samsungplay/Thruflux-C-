@@ -494,10 +494,11 @@ namespace sender {
                                                                    (sockaddr *) &c->remoteAddr,
                                                                    c, 0);
 
-                                           static int packetsSinceProcess = 0;
-                                           if (++packetsSinceProcess >= 64) {
-                                               packetsSinceProcess = 0;
-                                               process();
+                                           int diff = 0;
+                                           if (lsquic_engine_earliest_adv_tick(engine_, &diff)) {
+                                               if (diff <= 0) {
+                                                   lsquic_engine_process_conns(engine_);
+                                               }
                                            }
                                        },
                                        ctx
