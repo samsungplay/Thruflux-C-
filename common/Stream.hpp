@@ -113,13 +113,30 @@ namespace common {
             process();
 
             int diff;
+
+            static int hotLoopCount = 0;
+
             if (lsquic_engine_earliest_adv_tick(engine_, &diff)) {
                 if (diff <= 0) {
-                    g_idle_add_full(G_PRIORITY_HIGH_IDLE, engineTick, nullptr, nullptr);
+
+                    hotLoopCount++;
+
+                    if (hotLoopCount > 10) {
+                        hotLoopCount = 0;
+                        g_timeout_add_full(G_PRIORITY_HIGH, 1, engineTick, nullptr, nullptr);
+                    }
+                    else {
+                        g_idle_add_full(G_PRIORITY_DEFAULT, engineTick, nullptr, nullptr);
+                    }
+
                 } else {
-                    g_timeout_add_full(G_PRIORITY_HIGH, (guint)((diff + 999) / 1000), engineTick, nullptr, nullptr);
+                    hotLoopCount = 0;
+
+                    guint interval = (guint)((diff + 999) / 1000);
+                    g_timeout_add_full(G_PRIORITY_HIGH, interval, engineTick, nullptr, nullptr);
                 }
             } else {
+                hotLoopCount = 0;
                 g_timeout_add_full(G_PRIORITY_HIGH, 100, engineTick, nullptr, nullptr);
             }
 
