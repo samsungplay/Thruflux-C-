@@ -140,7 +140,7 @@ namespace sender {
                 auto &f = state->files[state->currentFileIndex];
                 uint64_t off = state->currentFileOffset;
 
-                state->currentFileOffset += 4 * 1024 * 1024;
+                state->currentFileOffset += 1024 * 1024;
 
                 if (off >= f.size) {
                     state->currentFileIndex++;
