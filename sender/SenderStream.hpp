@@ -229,11 +229,12 @@ namespace sender {
             .on_new_conn = [](void *streamIfCtx, lsquic_conn_t *connection) -> lsquic_conn_ctx * {
                 auto *ctx = static_cast<SenderQuicConnectionContext *>(lsquic_conn_get_peer_ctx(connection, nullptr));
                 ctx->connection = connection;
+                //open control stream
                 lsquic_conn_make_stream(connection);
-                if (ctx->componentId == 1) {
-                    //open control stream
+                for (int i=0; i<SenderConfig::totalStreams; i++) {
                     lsquic_conn_make_stream(connection);
                 }
+
                 spdlog::info("QUIC connection established on ICE Component {}", ctx->componentId);
 
                 return reinterpret_cast<lsquic_conn_ctx *>(ctx);
@@ -260,7 +261,7 @@ namespace sender {
                 ctx->state = connCtx->state;
                 ctx->senderMetrics = connCtx->senderMetrics;
 
-                if (connCtx->componentId == 1 && !connCtx->controlStreamCreated) {
+                if (!connCtx->controlStreamCreated) {
                     ctx->isControlStream = true;
                     connCtx->controlStreamCreated = true;
                 } else {
