@@ -194,22 +194,22 @@ namespace receiver {
                             return;
                         }
 
-                        // const int fd = receiverState->cache.get(ctx->fileId, O_WRONLY | O_CREAT, 0644);
-                        // if (fd == -1) {
-                        //     spdlog::error("Unexpected error: Could not get fd");
-                        //     lsquic_stream_close(stream);
-                        //     return;
-                        // }
+                        const int fd = receiverState->cache.get(ctx->fileId, O_WRONLY | O_CREAT, 0644);
+                        if (fd == -1) {
+                            spdlog::error("Unexpected error: Could not get fd");
+                            lsquic_stream_close(stream);
+                            return;
+                        }
 
                         common::receiverMetrics.bytesReceived += nr;
                         uint64_t writePos = ctx->chunkOffset + ctx->bodyBytesRead;
-                        // ssize_t nw = pwrite(fd, ctx->writeBuffer, nr, writePos);
-                        //
-                        // if (nw < 0) {
-                        //     spdlog::error("Could not write to disk: {}", errno);
-                        //     lsquic_stream_close(stream);
-                        //     return;
-                        // }
+                        ssize_t nw = pwrite(fd, ctx->writeBuffer, nr, writePos);
+
+                        if (nw < 0) {
+                            spdlog::error("Could not write to disk: {}", errno);
+                            lsquic_stream_close(stream);
+                            return;
+                        }
 
                         ctx->bodyBytesRead += nr;
 
