@@ -257,7 +257,8 @@ namespace receiver {
 
                 if (ctx->type == ReceiverStreamContext::MANIFEST) {
                     if (connCtx->pendingManifestAck) {
-                        const auto nw = lsquic_stream_write(stream, &common::RECEIVER_MANIFEST_RECEIVED_ACK, 1);
+                        uint8_t ack = common::RECEIVER_MANIFEST_RECEIVED_ACK;
+                        const auto nw = lsquic_stream_write(stream, &ack, 1);
                         if (nw == 1) {
                             lsquic_stream_flush(stream);
                             connCtx->pendingManifestAck = false;
@@ -267,7 +268,8 @@ namespace receiver {
                         }
                     }
                     if (connCtx->pendingCompleteAck) {
-                        const auto nw = lsquic_stream_write(stream, &common::RECEIVER_TRANSFER_COMPLETE_ACK, 1);
+                        uint8_t ack = common::RECEIVER_TRANSFER_COMPLETE_ACK;
+                        const auto nw = lsquic_stream_write(stream, &ack, 1);
                         if (nw == 1) {
                             lsquic_stream_flush(stream);
                             connCtx->pendingCompleteAck = false;

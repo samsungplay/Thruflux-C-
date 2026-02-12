@@ -50,7 +50,7 @@ namespace receiver {
 
     struct ReceiverStreamContext {
 
-        enum StreamType { UNKNOWN, MANIFEST, DATA, ACK } type = UNKNOWN;
+        enum StreamType { UNKNOWN, MANIFEST, DATA } type = UNKNOWN;
         bool readingHeader = true;
         uint8_t headerBuf[16];
         uint8_t headerBytesRead = 0;
