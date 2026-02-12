@@ -12,72 +12,6 @@
 #include <boost/asio/steady_timer.hpp>
 
 namespace common {
-    static constexpr uint64_t CONTROL_STREAM_ID = 2;
-
-    struct FileHandleCache {
-        struct Entry {
-            int fd;
-            uint64_t lastUsed;
-        };
-
-        std::unordered_map<uint32_t, Entry> openFiles;
-        std::unordered_map<uint32_t, std::string> paths;
-        const size_t MAX_FDS = 64;
-        uint64_t accessCounter = 0;
-
-        void registerPath(uint32_t id, const std::string &p) {
-            paths[id] = p;
-        }
-
-        int get(uint32_t id, int flags, mode_t mode = 0) {
-            accessCounter++;
-            if (openFiles.contains(id)) {
-                openFiles[id].lastUsed = accessCounter;
-                return openFiles[id].fd;
-            }
-
-            if (openFiles.size() >= MAX_FDS) {
-                uint32_t evictId = 0;
-                uint64_t minT = UINT64_MAX;
-                for (const auto &[fd, lastUsed]: openFiles | std::views::values) {
-                    if (lastUsed < minT) {
-                        minT = lastUsed;
-                        evictId = fd;
-                    }
-                }
-                close(openFiles[evictId].fd);
-                openFiles.erase(evictId);
-            }
-
-            const int fd = open(paths[id].c_str(), flags, mode);
-            if (fd == -1) {
-                spdlog::error("Failed to open file: {}, {}", id, errno);
-                return -1;
-            }
-
-            openFiles[id] = {fd, accessCounter};
-
-            return fd;
-        }
-
-        ~FileHandleCache() {
-            for (auto &[fd, lastUsed]: openFiles | std::views::values) {
-                close(fd);
-            }
-        }
-    };
-
-
-    struct QuicConnectionContext {
-        NiceAgent *agent;
-        guint streamId;
-        int componentId;
-        lsquic_conn_t *connection;
-        sockaddr_storage localAddr;
-        sockaddr_storage remoteAddr;
-        bool tickScheduled = false;
-    };
-
     static int spdlog_log_buf(void *ctx, const char *buf, size_t len) {
         std::string msg(buf, len);
 
@@ -103,12 +37,14 @@ namespace common {
     class Stream {
     protected:
         inline static lsquic_engine_t *engine_;
-        inline static std::vector<QuicConnectionContext *> connectionContexts_;
+        inline static std::vector<ConnectionContext *> connectionContexts_;
         inline static SSL_CTX *sslCtx_ = nullptr;
 
 
         static gboolean engineTick(gpointer data) {
-            if (!engine_) return G_SOURCE_REMOVE;
+            if (!engine_) {
+                return G_SOURCE_REMOVE;
+            }
 
             process();
 
@@ -116,9 +52,9 @@ namespace common {
 
             if (lsquic_engine_earliest_adv_tick(engine_, &diff)) {
                 if (diff <= 0) {
-                        g_idle_add_full(G_PRIORITY_DEFAULT, engineTick, nullptr, nullptr);
+                    g_idle_add_full(G_PRIORITY_DEFAULT, engineTick, nullptr, nullptr);
                 } else {
-                    guint interval = (guint)((diff + 999) / 1000);
+                    guint interval = (guint) ((diff + 999) / 1000);
                     g_timeout_add_full(G_PRIORITY_DEFAULT, interval, engineTick, nullptr, nullptr);
                 }
             } else {
@@ -171,7 +107,7 @@ namespace common {
             GOutputVector niceVectors[MAX_VECTORS];
 
             while (i < nSpecs) {
-                const auto *ctx = static_cast<QuicConnectionContext *>(
+                const auto *ctx = static_cast<ConnectionContext *>(
                     specs[i].conn_ctx ? specs[i].conn_ctx : specs[i].peer_ctx
                 );
                 if (!ctx) {
@@ -204,10 +140,10 @@ namespace common {
                     batchSize++;
                 }
 
-                int nSent = nice_agent_send_messages_nonblocking(
+                const int nSent = nice_agent_send_messages_nonblocking(
                     ctx->agent,
                     ctx->streamId,
-                    ctx->componentId,
+                    1,
                     niceMessages,
                     batchSize,
                     nullptr,
@@ -284,7 +220,6 @@ namespace common {
             }
 
             connectionContexts_.clear();
-            senderMetrics.clear();
 
             lsquic_global_cleanup();
         }

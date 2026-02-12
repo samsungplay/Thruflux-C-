@@ -72,7 +72,7 @@ namespace receiver {
                                     spdlog::info(
                                         "ICE connection has been established!");
                                     ReceiverStream::receiveTransfer(
-                                        agent, streamId, n);
+                                        agent, streamId);
                                     socket.send(nlohmann::json(common::AcknowledgeTransferSessionPayload{
                                         .receiverId = "to_be_provided_by_server"
                                     }).dump());

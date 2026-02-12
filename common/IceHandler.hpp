@@ -50,7 +50,6 @@ namespace common {
     struct IceAgentContext {
         NiceAgent *agent;
         guint streamId;
-        int n;
     };
 
     inline static std::vector<StunServer> stunServers_;
@@ -113,8 +112,7 @@ namespace common {
             if (isSender) {
                 agentsMap_.emplace(std::move(receiverId), IceAgentContext{
                                        .agent = agent,
-                                       .streamId = stream_id,
-                                       .n = n
+                                       .streamId = stream_id
                                    });
             } else {
                 receiverAgentContext_.agent = agent;

@@ -25,7 +25,9 @@ set(COMMON_SOURCES
         common/Types.hpp
         common/TTLCache.hpp
         common/IceHandler.hpp
-        common/Worker.hpp
+        common/ThreadManager.hpp
+        common/Contexts.hpp
+        common/Stream.hpp
 )
 
 add_executable(ThrufluxServer
@@ -42,12 +44,8 @@ add_executable(ThrufluxSender
         sender/SenderEntryPoint.cpp
         sender/SenderConfig.hpp
         sender/SenderSocketHandler.hpp
-        sender/SenderStateHolder.hpp
-        sender/SenderFileHandler.hpp
         ${COMMON_SOURCES}
         sender/SenderStream.hpp
-        common/Stream.hpp
-        common/Metrics.hpp
 )
 
 add_executable(ThrufluxReceiver
@@ -56,8 +54,7 @@ add_executable(ThrufluxReceiver
         receiver/ReceiverEntryPoint.cpp
         receiver/ReceiverSocketHandler.hpp
         receiver/ReceiverStream.hpp
-        common/Stream.hpp
-        common/Metrics.hpp
+        receiver/ReceiverContexts.hpp
 )
 
 set(SHARED_LIBS

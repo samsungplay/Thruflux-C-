@@ -5,12 +5,11 @@
 
 namespace common {
     class ThreadManager {
-
         inline static GMainContext *context_;
         inline static GMainLoop *mainLoop_;
+        inline static std::atomic<bool> terminating_{false};
 
     public:
-
         //run some task on the main thread
         static void postTask(std::function<void()> task) {
             auto *taskPtr = new std::function<void()>(std::move(task));
@@ -39,7 +38,10 @@ namespace common {
         }
 
         static void terminate() {
-            g_main_loop_quit(mainLoop_);
+            if (!terminating_.load()) {
+                terminating_.store(true);
+                g_main_loop_quit(mainLoop_);
+            }
         }
 
         static void runMainLoop() {

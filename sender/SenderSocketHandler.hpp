@@ -5,12 +5,9 @@
 #include <nlohmann/json_fwd.hpp>
 #include <spdlog/spdlog.h>
 #include "SenderConfig.hpp"
-#include <latch>
 #include "../common/Payloads.hpp"
 #include "../common/Utils.hpp"
-#include <boost/asio/post.hpp>
-#include "SenderFileHandler.hpp"
-#include "SenderStateHolder.hpp"
+#include "SenderContexts.hpp"
 #include "SenderStream.hpp"
 #include "../common/ThreadManager.hpp"
 
@@ -43,18 +40,23 @@ namespace sender {
                                     common::IceHandler::addTurnServer(turnServer.value());
                                 }
                             }
+
+                            senderPersistentContext.buildManifest(SenderConfig::paths);
+
                             const auto createTransferSessionPayload =
-                                    SenderFileHandler::generateCreateTransferSessionPayload(
-                                        SenderConfig::paths,
-                                        SenderConfig::maxReceivers
-                                    );
+                                    common::CreateTransferSessionPayload{
+                                        .maxReceivers = SenderConfig::maxReceivers,
+                                        .totalSize = senderPersistentContext.totalExpectedBytes,
+                                        .filesCount = senderPersistentContext.totalExpectedFilesCount,
+                                    };
+
                             socket.send(nlohmann::json(createTransferSessionPayload).dump());
                         });
                 } else if (type == "created_transfer_session_payload") {
                     const auto createdTransferPayload = j.get<common::CreatedTransferSessionPayload>();
                     spdlog::info("Session created with join code: {}", createdTransferPayload.joinCode);
                     common::ThreadManager::postTask([createdTransferPayload = std::move(createdTransferPayload)]() {
-                        SenderStateHolder::setJoinCode(createdTransferPayload.joinCode);
+                        senderPersistentContext.joinCode = createdTransferPayload.joinCode;
                     });
                 } else if (type == "join_transfer_session_payload") {
                     const auto joinTransferSessionPayload = j.get<common::JoinTransferSessionPayload>();
@@ -63,9 +65,6 @@ namespace sender {
 
                     common::ThreadManager::postTask(
                         [&socket,joinTransferSessionPayload = std::move(joinTransferSessionPayload)]() {
-                            SenderStateHolder::addReceiver(joinTransferSessionPayload.receiverId);
-                            auto receiverInfo = SenderStateHolder::getReceiverInfo(
-                                joinTransferSessionPayload.receiverId);
                             auto &receiverId = joinTransferSessionPayload.receiverId;
                             common::IceHandler::gatherLocalCandidates(true, receiverId, SenderConfig::totalConnections,
                                                                       [&socket, receiverId = std::move(receiverId),
@@ -112,7 +111,6 @@ namespace sender {
                         [quitTransferSessionPayload = std::move(quitTransferSessionPayload)]() {
                             auto &receiverId = quitTransferSessionPayload.receiverId;
                             spdlog::info("A receiver with id {} has left.", receiverId);
-                            SenderStateHolder::removeReceiver(receiverId);
                             SenderStream::disposeReceiverConnection(receiverId);
                             common::IceHandler::dispose(receiverId);
                         });
@@ -122,13 +120,10 @@ namespace sender {
                                  acknowledgeTransferSessionPayload.receiverId);
                     common::ThreadManager::postTask(
                         [acknowledgeTransferSessionPayload = std::move(acknowledgeTransferSessionPayload)]() {
-
-
                             const auto &iceContext = common::IceHandler::getAgentsMap()[
                                 acknowledgeTransferSessionPayload.receiverId];
 
                             SenderStream::startTransfer(iceContext.agent, iceContext.streamId,
-                                                         iceContext.n,
                                                         acknowledgeTransferSessionPayload.receiverId);
                         });
                 }
