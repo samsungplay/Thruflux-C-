@@ -194,7 +194,6 @@ namespace sender {
                             return;
                         }
                     } else {
-                        spdlog::info("DATA LOOP");
                         if (!ctx->currentMmap) {
                             spdlog::error("Unexpected error: currentMmap missing for QUIC connection");
                             lsquic_stream_close(stream);
