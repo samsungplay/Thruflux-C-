@@ -186,10 +186,7 @@ namespace sender {
                 }
 
 
-                constexpr size_t MAX_BYTES_PER_TICK = 128 * 1024;
-                size_t totalWritten = 0;
-
-                while (totalWritten < MAX_BYTES_PER_TICK) {
+                while (true) {
                     if (ctx->sendingHeader) {
                         size_t remaining = 16 - ctx->headerSent;
                         ssize_t nw = lsquic_stream_write(stream, ctx->headerBuf + ctx->headerSent, remaining);
@@ -197,7 +194,6 @@ namespace sender {
                             return;
                         }
                         ctx->headerSent += nw;
-                        totalWritten += nw;
                         if (ctx->headerSent == 16) {
                             ctx->sendingHeader = false;
                         } else {
@@ -218,7 +214,6 @@ namespace sender {
                         }
                         ctx->bytesSent += nw;
                         connCtx->bytesMoved += nw;
-                        totalWritten += nw;
 
                         if (ctx->bytesSent >= ctx->len) {
                             ctx->currentMmap = nullptr;
@@ -263,7 +258,7 @@ namespace sender {
             lsquic_engine_settings settings;
             lsquic_engine_init_settings(&settings, 0);
             settings.es_versions = (1 << LSQVER_I001);
-            settings.es_cc_algo = 2;
+            settings.es_cc_algo = 1;
             settings.es_init_max_data = SenderConfig::quicConnWindowBytes;
             settings.es_init_max_streams_uni = SenderConfig::quicMaxIncomingStreams;
             settings.es_init_max_streams_bidi = SenderConfig::quicMaxIncomingStreams;
