@@ -188,7 +188,7 @@
   }, {
     "name" : "libiconv",
     "version>=" : "1.18#3"
-  },  {
+  }, {
     "name" : "liblsquic",
     "version>=" : "3.3.2#1"
   }, {
@@ -230,7 +230,8 @@
   }, {
     "name" : "libnice",
     "version>=" : "0.1.22"
-  }
-
-  ]
+  }, {
+    "name" : "indicators",
+    "version>=" : "2.3"
+  } ]
 }

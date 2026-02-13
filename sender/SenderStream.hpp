@@ -1,62 +1,95 @@
 #pragma once
-#include<nice.h>
 #include <lsquic.h>
-#include <openssl/ssl.h>
 
 #include "SenderConfig.hpp"
-#include <sys/mman.h>
 #include "../common/Stream.hpp"
 #include "SenderContexts.hpp"
+#include <indicators/dynamic_progress.hpp>
+#include <indicators/multi_progress.hpp>
+#include <indicators/progress_bar.hpp>
+#include <indicators/termcolor.hpp>
 
 namespace sender {
     class SenderStream : public common::Stream {
         //unlike receiver, sender's progress reporter should run persistently
         static void watchProgress() {
-            g_timeout_add_full(G_PRIORITY_HIGH, 1000, [](gpointer data)-> gboolean {
-                for (const auto &context: connectionContexts_) {
-                    if (!context->started || context->complete) continue;
-
+            g_timeout_add_full(
+                G_PRIORITY_HIGH,
+                1000,
+                [](gpointer) -> gboolean {
                     const auto now = std::chrono::high_resolution_clock::now();
-                    if (context->lastTime.time_since_epoch().count() == 0) {
+                    const double totalBytes = static_cast<double>(senderPersistentContext.totalExpectedBytes);
+
+                    for (const auto &context: connectionContexts_) {
+                        if (!context || !context->started) continue;
+
+                        const auto &row = context->uiRow;
+
+                        if (context->complete) {
+                            if (!row->done) {
+                                row->done = true;
+                                row->progressBar.set_option(
+                                    indicators::option::ForegroundColor{indicators::Color::green});
+                                row->progressBar.set_option(indicators::option::PostfixText{"done"});
+                                row->progressBar.set_progress(100);
+                            }
+                            continue;
+                        }
+
+                        if (context->lastTime.time_since_epoch().count() == 0) {
+                            context->lastTime = now;
+                            context->lastBytesMoved = context->bytesMoved;
+                            continue;
+                        }
+
+                        const double elapsedSeconds =
+                                std::chrono::duration<double>(now - context->startTime).count();
+                        const double deltaSeconds =
+                                std::chrono::duration<double>(now - context->lastTime).count();
+
+                        const double safeDelta = (deltaSeconds > 1e-6) ? deltaSeconds : 1e-6;
+                        const double safeElapsed = (elapsedSeconds > 1e-6) ? elapsedSeconds : 1e-6;
+
+                        const double bytesMoved = static_cast<double>(context->bytesMoved);
+                        const double lastBytesMoved = static_cast<double>(context->lastBytesMoved);
+
+                        const double instantThroughput = (bytesMoved - lastBytesMoved) / safeDelta;
+                        const double averageThroughput = bytesMoved / safeElapsed;
+
+                        const double ewmaThroughput =
+                                (context->ewmaThroughput == 0.0)
+                                    ? instantThroughput
+                                    : 0.2 * instantThroughput + 0.8 * context->ewmaThroughput;
+
+                        context->ewmaThroughput = ewmaThroughput;
+
+                        const double percent = (totalBytes <= 0.0) ? 0.0 : (bytesMoved / totalBytes) * 100.0;
+                        int p = static_cast<int>(std::lround(percent));
+                        if (p < 0) p = 0;
+                        if (p > 100) p = 100;
+
+                        std::string postfix;
+                        postfix.reserve(128);
+                        postfix += common::Utils::sizeToReadableFormat(ewmaThroughput);
+                        postfix += "/s  sent ";
+                        postfix += common::Utils::sizeToReadableFormat(context->bytesMoved);
+                        postfix += "  files ";
+                        postfix += std::to_string(context->filesMoved);
+                        postfix += "/";
+                        postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);
+
+                        row->progressBar.set_option(indicators::option::PostfixText{postfix});
+                        row->progressBar.set_progress(p);
+
                         context->lastTime = now;
-                        continue;
+                        context->lastBytesMoved = context->bytesMoved;
                     }
 
-                    std::chrono::duration<double> elapsed = now - context->startTime;
-                    std::chrono::duration<double> delta = now - context->lastTime;
-
-                    const double elapsedSeconds = elapsed.count();
-                    const double deltaSeconds = delta.count();
-
-                    const double instantThroughput =
-                            (context->bytesMoved - context->lastBytesMoved) / deltaSeconds;
-                    const double averageThroughput = context->bytesMoved / elapsedSeconds;
-                    const double ewmaThroughput = context->ewmaThroughput == 0
-                                                      ? instantThroughput
-                                                      : 0.2 * instantThroughput + 0.8 * context->
-                                                        ewmaThroughput;
-                    context->ewmaThroughput = ewmaThroughput;
-
-                    const double percent = (static_cast<double>(context->bytesMoved) /
-                                            senderPersistentContext.totalExpectedBytes) * 100.0;
-
-
-                    context->lastTime = now;
-                    context->lastBytesMoved = context->bytesMoved;
-                    spdlog::info(
-                        "Receiver : {} | Instant Throughput: {}/s | EWMA Throughput: {}/s |  Elapsed: {}s | Average Throughput: {}/s | Total Sent: {} | Progress: {}% | "
-                        "Files {}/{}",
-                        static_cast<SenderConnectionContext *>(context)->receiverId,
-                        common::Utils::sizeToReadableFormat(instantThroughput),
-                        common::Utils::sizeToReadableFormat(ewmaThroughput), elapsedSeconds,
-                        common::Utils::sizeToReadableFormat(averageThroughput),
-                        common::Utils::sizeToReadableFormat(context->bytesMoved), percent,
-                        context->filesMoved,
-                        senderPersistentContext.totalExpectedFilesCount
-                    );
-                }
-                return G_SOURCE_CONTINUE;
-            }, nullptr, nullptr);
+                    return G_SOURCE_CONTINUE;
+                },
+                nullptr,
+                nullptr
+            );
         }
 
         inline static lsquic_stream_if streamCallbacks = {
@@ -77,7 +110,7 @@ namespace sender {
                 if (ctx) {
                     if (ctx->complete) {
                         spdlog::info("Transfer completed for receiver {}", ctx->receiverId);
-                        const std::chrono::duration<double> diff =  ctx->endTime - ctx->startTime;
+                        const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
                         spdlog::info("Time taken: {}s", diff.count());
                     } else {
                         spdlog::error("Transfer failed for receiver {}", ctx->receiverId);
@@ -346,7 +379,6 @@ namespace sender {
 
 
             g_timeout_add(0, engineTick, nullptr);
-
         }
 
 

@@ -5,6 +5,7 @@
 #include <ranges>
 #include <unordered_map>
 #include <string>
+#include <indicators/progress_bar.hpp>
 #include <spdlog/spdlog.h>
 #include <sys/fcntl.h>
 
@@ -67,6 +68,27 @@ namespace common {
     };
 
 
+    struct UiRow {
+        indicators::ProgressBar progressBar;
+        bool done = false;
+
+        explicit UiRow(std::string prefix) : progressBar(
+            indicators::option::BarWidth(32),
+            indicators::option::Start("["),
+            indicators::option::Fill("■"),
+            indicators::option::Lead("■"),
+            indicators::option::Remainder("."),
+            indicators::option::End("]"),
+            indicators::option::ShowPercentage(true),
+            indicators::option::ShowElapsedTime(true),
+            indicators::option::ShowRemainingTime(false),
+            indicators::option::PrefixText(std::move(prefix)),
+            indicators::option::MaxProgress(100),
+            indicators::option::ForegroundColor(indicators::Color::cyan)
+        ) {
+        }
+    };
+
     struct ConnectionContext {
         NiceAgent *agent;
         guint streamId;
@@ -83,6 +105,10 @@ namespace common {
         bool started = false;
         bool complete = false;
         lsquic_stream_t *manifestStream = nullptr;
-        bool processScheduled = false;
+        std::unique_ptr<UiRow> uiRow = nullptr;
+
+        void initializeUI(std::string prefix) {
+            uiRow = std::make_unique<UiRow>(prefix);
+        }
     };
 }
