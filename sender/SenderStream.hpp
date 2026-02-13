@@ -272,6 +272,9 @@ namespace sender {
             settings.es_delayed_acks = 0;
             settings.es_max_batch_size = 32;
             settings.es_rw_once = 1;
+            settings.es_scid_len = 8;
+            settings.es_max_cfcw = 1024 * 1024 * 1024;
+            settings.es_max_sfcw = 256 * 1024 * 1024;
 
 
             char err_buf[256];
