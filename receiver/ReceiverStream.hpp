@@ -247,6 +247,7 @@ namespace receiver {
                             //transfer complete. needs to send ACK to sender..
                             connCtx->complete = true;
                             connCtx->pendingCompleteAck = true;
+                            connCtx->endTime = std::chrono::high_resolution_clock::now();
                             lsquic_stream_wantwrite(connCtx->manifestStream,1);
                             lsquic_stream_wantread(stream,0);
                             return;
