@@ -226,7 +226,8 @@ namespace common {
 
 
         static void process() {
-            if (engine_) lsquic_engine_process_conns(engine_);
+            lsquic_engine_process_conns(engine_);
+            lsquic_engine_send_unsent_packets(engine_);
         }
     };
 }
