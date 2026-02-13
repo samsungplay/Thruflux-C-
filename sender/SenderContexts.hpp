@@ -156,7 +156,6 @@ namespace sender {
         uint64_t currentFileOffset = 0;
         bool manifestCreated = false;
         size_t manifestSent = 0;
-        int filesSent = 0;
     };
 
     struct SenderStreamContext {
@@ -186,7 +185,7 @@ namespace sender {
 
                 if (off >= f.size) {
                     connectionContext->currentFileIndex++;
-                    connectionContext->filesSent++;
+                    connectionContext->filesMoved++;
                     connectionContext->currentFileOffset = 0;
                     continue;
                 }

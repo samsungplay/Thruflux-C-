@@ -161,7 +161,6 @@ namespace receiver {
                     } else {
                         return;
                     }
-                    return;
                 }
 
                 if (ctx->type == ReceiverStreamContext::MANIFEST) {

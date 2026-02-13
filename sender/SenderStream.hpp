@@ -19,7 +19,7 @@ namespace sender {
                     const auto now = std::chrono::high_resolution_clock::now();
                     if (context->lastTime.time_since_epoch().count() == 0) {
                         context->lastTime = now;
-                        return G_SOURCE_CONTINUE;
+                        continue;
                     }
 
                     std::chrono::duration<double> elapsed = now - context->startTime;
@@ -162,7 +162,6 @@ namespace sender {
                     } else {
                         return;
                     }
-                    return;
                 }
 
                 auto *connCtx = reinterpret_cast<SenderConnectionContext *>(lsquic_conn_get_ctx(
@@ -213,7 +212,6 @@ namespace sender {
                         if (nw <= 0) {
                             return;
                         }
-
                         ctx->bytesSent += nw;
                         connCtx->bytesMoved += nw;
 
@@ -294,6 +292,7 @@ namespace sender {
 
         static void startTransfer(NiceAgent *agent, const guint streamId,
                                   std::string receiverId) {
+
             setAndVerifySocketBuffers(agent, streamId, 1, SenderConfig::udpBufferBytes);
 
             NiceCandidate *local = nullptr, *remote = nullptr;
