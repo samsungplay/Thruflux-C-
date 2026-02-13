@@ -152,7 +152,6 @@ namespace sender {
                 }
             },
             .on_write = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
-                spdlog::info("ON WRITE: {} ", lsquic_stream_id(stream));
                 auto *ctx = reinterpret_cast<SenderStreamContext *>(h);
                 auto *connCtx = reinterpret_cast<SenderConnectionContext *>(lsquic_conn_get_ctx(
                     lsquic_stream_conn(stream)));
@@ -232,7 +231,6 @@ namespace sender {
                         }
                     }
                 }
-                spdlog::info("QUOTA EXIT");
             },
 
             .on_close = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
