@@ -221,8 +221,7 @@ namespace receiver {
                         }
 
                         uint64_t writePos = ctx->chunkOffset + ctx->bodyBytesRead;
-                        // ssize_t nw = pwrite(fd, ctx->writeBuffer, nr, writePos);
-                        auto nw = nr;
+                        ssize_t nw = pwrite(fd, ctx->writeBuffer, nr, writePos);
                         connCtx->bytesMoved += nw;
                         connCtx->perFileBytesWritten[ctx->fileId] += nw;
                         if (connCtx->perFileBytesWritten[ctx->fileId] == connCtx->fileSizes[ctx->fileId]) {
