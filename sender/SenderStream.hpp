@@ -186,7 +186,11 @@ namespace sender {
                     return;
                 }
 
-                while (true) {
+
+                constexpr size_t MAX_BYTES_PER_TICK = 128 * 1024;
+                size_t totalWritten = 0;
+
+                while (totalWritten < MAX_BYTES_PER_TICK) {
                     if (ctx->sendingHeader) {
                         size_t remaining = 16 - ctx->headerSent;
                         ssize_t nw = lsquic_stream_write(stream, ctx->headerBuf + ctx->headerSent, remaining);
@@ -194,6 +198,7 @@ namespace sender {
                             return;
                         }
                         ctx->headerSent += nw;
+                        totalWritten += nw;
                         if (ctx->headerSent == 16) {
                             ctx->sendingHeader = false;
                         } else {
@@ -214,6 +219,7 @@ namespace sender {
                         }
                         ctx->bytesSent += nw;
                         connCtx->bytesMoved += nw;
+                        totalWritten += nw;
 
                         if (ctx->bytesSent >= ctx->len) {
                             ctx->currentMmap = nullptr;
