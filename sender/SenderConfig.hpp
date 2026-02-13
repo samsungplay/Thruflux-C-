@@ -19,7 +19,7 @@ public:
         "stun://stun.bytepipe.app:3478";
     inline static std::string turnServers;
     inline static bool testTurn = false;
-    inline static std::int64_t quicStreamWindowBytes = 64 * 1024 * 1024;
+    inline static std::int64_t quicStreamWindowBytes = 32 * 1024 * 1024;
     inline static int quicMaxIncomingStreams = 100;
     inline static int chunkSize = 16384;
     inline static int totalConnections = 1;
@@ -27,7 +27,7 @@ public:
     inline static int udpBufferBytes = 8388608;
     inline static bool benchmark = false;
     inline static bool verbose = false;
-    inline static std::int64_t quicConnWindowBytes = 512 * 1024 * 1024;
+    inline static std::int64_t quicConnWindowBytes = 256 * 1024 * 1024;
 
     static void initialize(int argc, char** argv) {
         CLI::App app{"Thruflux Sender"};

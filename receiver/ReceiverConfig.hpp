@@ -18,8 +18,8 @@ namespace receiver {
         inline static std::string turnServers;
         inline static bool testTurn = false;
 
-        inline static int quicConnWindowBytes = 512 * 1024 * 1024;
-        inline static int quicStreamWindowBytes = 64 * 1024 * 1024;
+        inline static std::int64_t quicConnWindowBytes = 256 * 1024 * 1024;
+        inline static std::int64_t quicStreamWindowBytes = 32 * 1024 * 1024;
         inline static int quicMaxIncomingStreams = 100;
 
         inline static int totalConnections = 1;

@@ -319,8 +319,8 @@ namespace receiver {
             settings.es_max_batch_size = 32;
             settings.es_rw_once = 1;
             settings.es_scid_len = 8;
-            settings.es_max_cfcw = 1024 * 1024 * 1024;
-            settings.es_max_sfcw = 256 * 1024 * 1024;
+            settings.es_max_cfcw = ReceiverConfig::quicConnWindowBytes * 2;
+            settings.es_max_sfcw = ReceiverConfig::quicStreamWindowBytes * 2;
 
             char err_buf[256];
             if (0 != lsquic_engine_check_settings(&settings, LSENG_SERVER, err_buf, sizeof(err_buf))) {
