@@ -355,15 +355,16 @@ namespace receiver {
                                                            (sockaddr *) &c->remoteAddr,
                                                            c, 0);
 
-                                   if (!c->processScheduled) {
-                                       c->processScheduled = true;
-                                       g_idle_add_full(G_PRIORITY_DEFAULT, [](gpointer data)-> gboolean {
-                                           auto *context = static_cast<common::ConnectionContext *>(data);
-                                           process();
-                                           context->processScheduled = false;
-                                           return G_SOURCE_REMOVE;
-                                       }, c, nullptr);
-                                   }
+                                   // if (!c->processScheduled) {
+                                       // c->processScheduled = true;
+                                       // g_idle_add_full(G_PRIORITY_DEFAULT, [](gpointer data)-> gboolean {
+                                       //     auto *context = static_cast<common::ConnectionContext *>(data);
+                                       //     process();
+                                       //     context->processScheduled = false;
+                                       //     return G_SOURCE_REMOVE;
+                                       // }, c, nullptr);
+                                   // }
+                                   process();
                                },
                                ctx
         );
