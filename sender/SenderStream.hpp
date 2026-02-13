@@ -232,6 +232,7 @@ namespace sender {
                         }
                     }
                 }
+                spdlog::info("QUOTA EXIT");
             },
 
             .on_close = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
