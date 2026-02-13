@@ -290,6 +290,8 @@ namespace sender {
             engine_ = lsquic_engine_new(0, &api);
 
             spdlog::info("LSQUIC Engine Successfully Initialized. {}", engine_ == nullptr);
+
+            watchProgress();
         }
 
 
@@ -344,7 +346,7 @@ namespace sender {
 
 
             g_timeout_add(0, engineTick, nullptr);
-            watchProgress();
+
         }
 
 
