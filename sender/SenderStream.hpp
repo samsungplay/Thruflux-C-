@@ -265,6 +265,7 @@ namespace sender {
             settings.es_handshake_to = 30000000;
             settings.es_allow_migration = 0;
             settings.es_pace_packets = 0;
+            settings.es_max_batch_size = 128;
 
 
             char err_buf[256];
