@@ -310,7 +310,6 @@ namespace receiver {
             settings.es_init_max_stream_data_bidi_remote = ReceiverConfig::quicStreamWindowBytes;
             settings.es_handshake_to = 16777215;
             settings.es_allow_migration = 0;
-            settings.es_rw_once = 1;
 
             char err_buf[256];
             if (0 != lsquic_engine_check_settings(&settings, LSENG_SERVER, err_buf, sizeof(err_buf))) {

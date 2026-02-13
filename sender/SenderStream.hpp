@@ -264,7 +264,6 @@ namespace sender {
             settings.es_init_max_stream_data_bidi_remote = SenderConfig::quicStreamWindowBytes;
             settings.es_handshake_to = 30000000;
             settings.es_allow_migration = 0;
-            settings.es_rw_once = 1;
 
 
             char err_buf[256];
