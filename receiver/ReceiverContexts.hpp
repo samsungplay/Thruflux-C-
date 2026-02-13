@@ -43,6 +43,7 @@ namespace receiver {
                 std::filesystem::path full = std::filesystem::path(ReceiverConfig::out) / relativePath;
                 std::filesystem::create_directories(full.parent_path());
                 cache.registerPath(id, full.string());
+                spdlog::info("parsed {}", full.string());
             }
             spdlog::info("Manifest parsed. {} files. totalExpectedBytes: {}", count, totalExpectedBytes);
         }

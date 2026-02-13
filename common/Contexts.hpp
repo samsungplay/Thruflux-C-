@@ -83,5 +83,6 @@ namespace common {
         bool started = false;
         bool complete = false;
         lsquic_stream_t *manifestStream = nullptr;
+        bool processScheduled = false;
     };
 }

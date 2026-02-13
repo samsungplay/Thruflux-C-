@@ -90,7 +90,6 @@ namespace sender {
                 auto *connCtx = reinterpret_cast<SenderConnectionContext *>(lsquic_conn_get_ctx(
                     lsquic_stream_conn(stream)));
 
-
                 auto *ctx = new SenderStreamContext();
 
                 ctx->connectionContext = connCtx;
@@ -127,15 +126,16 @@ namespace sender {
                                 connCtx->startTime = std::chrono::high_resolution_clock::now();
                             }
 
-                            //save the manifest stream for reading future ack
+
+                            // //save the manifest stream for reading future ack
                             connCtx->manifestStream = stream;
+
                             lsquic_stream_wantread(stream, 0);
 
                             //Open all the streams
                             for (int i = 0; i < SenderConfig::totalStreams; i++) {
                                 lsquic_conn_make_stream(connCtx->connection);
                             }
-
                         } else if (buf[0] == common::RECEIVER_TRANSFER_COMPLETE_ACK) {
                             connCtx->complete = true;
                             connCtx->endTime = std::chrono::high_resolution_clock::now();
@@ -150,9 +150,8 @@ namespace sender {
             },
             .on_write = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
                 auto *ctx = reinterpret_cast<SenderStreamContext *>(h);
-
-                // spdlog::info("OnWrite Invoked: {}", lsquic_stream_id(stream));
-
+                auto *connCtx = reinterpret_cast<SenderConnectionContext *>(lsquic_conn_get_ctx(
+                    lsquic_stream_conn(stream)));
 
                 if (!ctx->typeByteSent) {
                     uint8_t tag = ctx->isManifestStream ? 0x00 : 0x01;
@@ -163,9 +162,6 @@ namespace sender {
                         return;
                     }
                 }
-
-                auto *connCtx = reinterpret_cast<SenderConnectionContext *>(lsquic_conn_get_ctx(
-                    lsquic_stream_conn(stream)));
 
 
                 if (ctx->isManifestStream) {
@@ -178,10 +174,10 @@ namespace sender {
                     }
                     if (connCtx->manifestSent == total) {
                         lsquic_stream_flush(stream);
-                        //wait for manifest ack
-                        lsquic_stream_wantread(stream, 1);
                         //half-close the write side
                         lsquic_stream_shutdown(stream, 1);
+                        //wait for manifest ack
+                        lsquic_stream_wantread(stream, 1);
                     }
                     return;
                 }
@@ -210,11 +206,10 @@ namespace sender {
                                              ctx->bytesSent;
                         ssize_t nw = lsquic_stream_write(stream, ptr, remaining);
                         if (nw <= 0) {
-                            return;
+                            break;
                         }
                         ctx->bytesSent += nw;
                         connCtx->bytesMoved += nw;
-
 
                         if (ctx->bytesSent >= ctx->len) {
                             ctx->currentMmap = nullptr;
@@ -227,13 +222,10 @@ namespace sender {
                         }
                     }
                 }
-
-
             },
 
             .on_close = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
                 const auto *ctx = reinterpret_cast<SenderStreamContext *>(h);
-                spdlog::error("Stream closed : {}", ctx->id);
                 delete ctx;
             },
 
@@ -272,6 +264,7 @@ namespace sender {
             settings.es_init_max_stream_data_bidi_remote = SenderConfig::quicStreamWindowBytes;
             settings.es_handshake_to = 30000000;
             settings.es_allow_migration = 0;
+            settings.es_rw_once = 1;
 
 
             char err_buf[256];
@@ -292,7 +285,6 @@ namespace sender {
 
         static void startTransfer(NiceAgent *agent, const guint streamId,
                                   std::string receiverId) {
-
             setAndVerifySocketBuffers(agent, streamId, 1, SenderConfig::udpBufferBytes);
 
             NiceCandidate *local = nullptr, *remote = nullptr;
@@ -324,10 +316,14 @@ namespace sender {
                                                                (sockaddr *) &c->remoteAddr,
                                                                c, 0);
 
-                                       static int packetsSinceProcess = 0;
-                                       if (++packetsSinceProcess >= 64) {
-                                           packetsSinceProcess = 0;
-                                           process();
+                                       if (!c->processScheduled) {
+                                           c->processScheduled = true;
+                                           g_idle_add_full(G_PRIORITY_DEFAULT, [](gpointer data)-> gboolean {
+                                               auto *context = static_cast<common::ConnectionContext *>(data);
+                                               process();
+                                               context->processScheduled = false;
+                                               return G_SOURCE_REMOVE;
+                                           }, c, nullptr);
                                        }
                                    },
                                    ctx

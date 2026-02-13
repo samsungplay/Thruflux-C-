@@ -19,7 +19,7 @@ public:
         "stun://stun.bytepipe.app:3478";
     inline static std::string turnServers;
     inline static bool testTurn = false;
-    inline static std::int64_t quicStreamWindowBytes = 67108864;
+    inline static std::int64_t quicStreamWindowBytes = 64 * 1024 * 1024;
     inline static int quicMaxIncomingStreams = 100;
     inline static int chunkSize = 16384;
     inline static int totalConnections = 1;

@@ -138,7 +138,6 @@ namespace receiver {
                 common::ThreadManager::terminate();
             },
             .on_new_stream = [](void *stream_if_ctx, lsquic_stream_t *stream) -> lsquic_stream_ctx_t * {
-                spdlog::warn("New stream!!!!");
                 lsquic_stream_wantread(stream, 1);
                 return reinterpret_cast<lsquic_stream_ctx_t *>(new ReceiverStreamContext());
             },
@@ -153,7 +152,6 @@ namespace receiver {
                         ctx->type = (tag == 0x00)
                                         ? ReceiverStreamContext::MANIFEST
                                         : ReceiverStreamContext::DATA;
-                        spdlog::info("Type detected : {}", ctx->type == ReceiverStreamContext::MANIFEST ? "MANIFEST" : "DATA");
                         if (ctx->type == ReceiverStreamContext::DATA && !connCtx->started) {
                             connCtx->started = true;
                             watchProgress();
@@ -165,22 +163,23 @@ namespace receiver {
 
                 if (ctx->type == ReceiverStreamContext::MANIFEST) {
                     uint8_t tmp[4096];
-                    const auto nr = lsquic_stream_read(stream, tmp, sizeof(tmp));
-                    if (nr > 0) connCtx->manifestBuf.insert(connCtx->manifestBuf.end(), tmp, tmp + nr);
-                    //EOF
-                    if (nr == 0 && !connCtx->manifestParsed) {
-                        connCtx->parseManifest();
-                        connCtx->manifestParsed = true;
-                        connCtx->pendingManifestAck = true;
-                        lsquic_stream_wantwrite(stream, 1);
-                        //half-close the read side
-                        lsquic_stream_shutdown(stream,0);
+                    while (!connCtx->manifestParsed) {
+                        const auto nr = lsquic_stream_read(stream, tmp, sizeof(tmp));
+                        if (nr > 0) connCtx->manifestBuf.insert(connCtx->manifestBuf.end(), tmp, tmp + nr);
+                        if (nr == 0) {
+                            connCtx->parseManifest();
+                            connCtx->manifestParsed = true;
+                            connCtx->pendingManifestAck = true;
+                            //must write ACK
+                            lsquic_stream_wantwrite(stream, 1);
+                            //no reading
+                            lsquic_stream_wantread(stream,0);
+                            break;
+                        }
+                        if (nr < 0) {
+                            spdlog::error("Error while reading manifest stream");
+                        }
                     }
-                    return;
-                }
-
-                if (!connCtx->manifestParsed) {
-                    //wait until manifest gets parsed
                     return;
                 }
 
@@ -193,6 +192,7 @@ namespace receiver {
                         }
 
                         ctx->headerBytesRead += nr;
+
 
                         if (ctx->headerBytesRead == 16) {
                             memcpy(&ctx->chunkOffset, ctx->headerBuf, 8);
@@ -209,7 +209,7 @@ namespace receiver {
                         size_t readSize = std::min(sizeof(ctx->writeBuffer), remaining);
                         ssize_t nr = lsquic_stream_read(stream, ctx->writeBuffer, readSize);
                         if (nr <= 0) {
-                            return;
+                            break;
                         }
 
                         const int fd = connCtx->cache.get(ctx->fileId, O_WRONLY | O_CREAT, 0644);
@@ -245,7 +245,7 @@ namespace receiver {
                             connCtx->complete = true;
                             connCtx->pendingCompleteAck = true;
                             lsquic_stream_wantwrite(connCtx->manifestStream,1);
-                            // lsquic_stream_shutdown(stream,0);
+                            lsquic_stream_wantread(stream,0);
                             return;
                         }
                     }
@@ -274,7 +274,7 @@ namespace receiver {
                         if (nw == 1) {
                             lsquic_stream_flush(stream);
                             connCtx->pendingCompleteAck = false;
-                            lsquic_stream_shutdown(stream, 1);
+                            lsquic_stream_wantwrite(stream,0);
                         }
                     }
                 }
@@ -310,6 +310,7 @@ namespace receiver {
             settings.es_init_max_stream_data_bidi_remote = ReceiverConfig::quicStreamWindowBytes;
             settings.es_handshake_to = 16777215;
             settings.es_allow_migration = 0;
+            settings.es_rw_once = 1;
 
             char err_buf[256];
             if (0 != lsquic_engine_check_settings(&settings, LSENG_SERVER, err_buf, sizeof(err_buf))) {
@@ -346,23 +347,27 @@ namespace receiver {
 
 
             nice_agent_attach_recv(agent, streamId, 1, common::ThreadManager::getContext(),
-                                   [](NiceAgent *agent, guint stream_id, guint component_id,
-                                      guint len, gchar *buf, gpointer user_data) {
-                                       auto *c = static_cast<common::ConnectionContext *>(user_data);
+                               [](NiceAgent *agent, guint stream_id, guint component_id,
+                                  guint len, gchar *buf, gpointer user_data) {
+                                   auto *c = static_cast<common::ConnectionContext *>(user_data);
 
-                                       lsquic_engine_packet_in(engine_, (unsigned char *) buf, len,
-                                                               (sockaddr *) &c->localAddr,
-                                                               (sockaddr *) &c->remoteAddr,
-                                                               c, 0);
+                                   lsquic_engine_packet_in(engine_, (unsigned char *) buf, len,
+                                                           (sockaddr *) &c->localAddr,
+                                                           (sockaddr *) &c->remoteAddr,
+                                                           c, 0);
 
-                                       static int packetsSinceProcess = 0;
-                                       if (++packetsSinceProcess >= 64) {
-                                           packetsSinceProcess = 0;
+                                   if (!c->processScheduled) {
+                                       c->processScheduled = true;
+                                       g_idle_add_full(G_PRIORITY_DEFAULT, [](gpointer data)-> gboolean {
+                                           auto *context = static_cast<common::ConnectionContext *>(data);
                                            process();
-                                       }
-                                   },
-                                   ctx
-            );
+                                           context->processScheduled = false;
+                                           return G_SOURCE_REMOVE;
+                                       }, c, nullptr);
+                                   }
+                               },
+                               ctx
+        );
 
             g_timeout_add(0, engineTick, nullptr);
         }

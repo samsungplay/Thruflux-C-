@@ -156,6 +156,7 @@ namespace sender {
         uint64_t currentFileOffset = 0;
         bool manifestCreated = false;
         size_t manifestSent = 0;
+
     };
 
     struct SenderStreamContext {
@@ -173,6 +174,7 @@ namespace sender {
         int id = 0;
 
         bool loadNextChunk() {
+
             while (true) {
                 if (connectionContext->currentFileIndex >= senderPersistentContext.files.size()) {
                     return false;
