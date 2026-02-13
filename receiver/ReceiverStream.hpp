@@ -50,6 +50,7 @@ namespace receiver {
                                                   ? instantThroughput
                                                   : 0.2 * instantThroughput + 0.8 * receiverConnectionContext->
                                                     ewmaThroughput;
+                receiverConnectionContext->ewmaThroughput = ewmaThroughput;
 
                 const double percent = (static_cast<double>(receiverConnectionContext->bytesMoved) /
                                         receiverConnectionContext->

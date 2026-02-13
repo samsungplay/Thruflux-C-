@@ -35,6 +35,7 @@ namespace sender {
                                                       ? instantThroughput
                                                       : 0.2 * instantThroughput + 0.8 * context->
                                                         ewmaThroughput;
+                    context->ewmaThroughput = ewmaThroughput;
 
                     const double percent = (static_cast<double>(context->bytesMoved) /
                                             senderPersistentContext.totalExpectedBytes) * 100.0;
