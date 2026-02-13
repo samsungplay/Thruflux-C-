@@ -129,6 +129,8 @@ namespace receiver {
                 if (ctx) {
                     if (ctx->complete) {
                         spdlog::info("Transfer completed.");
+                        const std::chrono::duration<double> diff =  ctx->endTime - ctx->startTime;
+                        spdlog::info("Time taken: {}s", diff.count());
                     }
                     else {
                         spdlog::error("Transfer failed.");
