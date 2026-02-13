@@ -266,7 +266,7 @@ namespace sender {
             settings.es_handshake_to = 30000000;
             settings.es_allow_migration = 0;
             settings.es_pace_packets = 0;
-            settings.es_delayed_acks = 0;
+            settings.es_delayed_acks = 1;
             settings.es_rw_once = 1;
 
 

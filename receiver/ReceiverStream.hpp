@@ -312,7 +312,7 @@ namespace receiver {
             settings.es_handshake_to = 16777215;
             settings.es_allow_migration = 0;
             settings.es_pace_packets = 0;
-            settings.es_delayed_acks = 0;
+            settings.es_delayed_acks = 1;
             settings.es_rw_once = 1;
 
             char err_buf[256];
