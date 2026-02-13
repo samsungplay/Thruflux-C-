@@ -50,6 +50,7 @@ namespace sender {
         std::unordered_map<uint32_t, std::shared_ptr<MmapEntry> > mmaps;
         std::list<uint32_t> lruList;
         const size_t MAX_MMAPS = 16;
+        int globalCnt =0;
 
         void buildManifest(const std::vector<std::string>& paths) {
 
@@ -170,6 +171,7 @@ namespace sender {
         uint8_t headerBuf[16];
         bool sendingHeader = false;
         uint8_t headerSent = 0;
+        int id = 0;
 
         bool loadNextChunk() {
             while (true) {

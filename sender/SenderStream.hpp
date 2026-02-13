@@ -59,6 +59,7 @@ namespace sender {
         }
 
         inline static lsquic_stream_if streamCallbacks = {
+
             .on_new_conn = [](void *streamIfCtx, lsquic_conn_t *connection) -> lsquic_conn_ctx * {
                 auto *ctx = static_cast<SenderConnectionContext *>(lsquic_conn_get_peer_ctx(connection, nullptr));
                 ctx->connection = connection;
@@ -67,6 +68,7 @@ namespace sender {
                 spdlog::info("QUIC connection established");
                 return reinterpret_cast<lsquic_conn_ctx *>(ctx);
             },
+
             .on_conn_closed = [](lsquic_conn_t *connection) {
                 auto *ctx = reinterpret_cast<SenderConnectionContext *>(lsquic_conn_get_ctx(connection));
                 spdlog::info("QUIC Connection closed");;
@@ -83,14 +85,16 @@ namespace sender {
                 }
             },
 
+
             .on_new_stream = [](void *stream_if_ctx, lsquic_stream_t *stream) -> lsquic_stream_ctx * {
                 auto *connCtx = reinterpret_cast<SenderConnectionContext *>(lsquic_conn_get_ctx(
                     lsquic_stream_conn(stream)));
-                lsquic_stream_wantwrite(stream, 1);
+
 
                 auto *ctx = new SenderStreamContext();
 
                 ctx->connectionContext = connCtx;
+
 
                 if (!connCtx->manifestStreamCreated) {
                     ctx->isManifestStream = true;
@@ -102,17 +106,18 @@ namespace sender {
                     }
                 }
 
+                lsquic_stream_wantwrite(stream, 1);
+
                 return reinterpret_cast<lsquic_stream_ctx *>(ctx);
             },
             .on_read = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
-
                 auto *ctx = reinterpret_cast<SenderStreamContext *>(h);
                 auto *connCtx = reinterpret_cast<SenderConnectionContext *>(lsquic_conn_get_ctx(
                     lsquic_stream_conn(stream)));
 
                 if (ctx->isManifestStream) {
                     uint8_t buf[1];
-                    const auto nr = lsquic_stream_read(stream,buf,1);
+                    const auto nr = lsquic_stream_read(stream, buf, 1);
 
                     if (nr == 1) {
                         if (buf[0] == common::RECEIVER_MANIFEST_RECEIVED_ACK) {
@@ -121,18 +126,20 @@ namespace sender {
                                 connCtx->started = true;
                                 connCtx->startTime = std::chrono::high_resolution_clock::now();
                             }
+
+                            //save the manifest stream for reading future ack
+                            connCtx->manifestStream = stream;
+                            lsquic_stream_wantread(stream, 0);
+
                             //Open all the streams
                             for (int i = 0; i < SenderConfig::totalStreams; i++) {
                                 lsquic_conn_make_stream(connCtx->connection);
                             }
-                            //save the manifest stream for reading future ack
-                            connCtx->manifestStream = stream;
-                            lsquic_stream_wantread(stream,0);
-                        }
-                        else if (buf[0] == common::RECEIVER_TRANSFER_COMPLETE_ACK) {
+
+                        } else if (buf[0] == common::RECEIVER_TRANSFER_COMPLETE_ACK) {
                             connCtx->complete = true;
                             connCtx->endTime = std::chrono::high_resolution_clock::now();
-                            lsquic_stream_shutdown(stream,0);
+                            lsquic_stream_shutdown(stream, 0);
                             if (connCtx->connection) {
                                 lsquic_conn_close(connCtx->connection);
                                 connCtx->connection = nullptr;
@@ -142,8 +149,9 @@ namespace sender {
                 }
             },
             .on_write = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
-
                 auto *ctx = reinterpret_cast<SenderStreamContext *>(h);
+
+                // spdlog::info("OnWrite Invoked: {}", lsquic_stream_id(stream));
 
 
                 if (!ctx->typeByteSent) {
@@ -155,7 +163,6 @@ namespace sender {
                         return;
                     }
                     return;
-
                 }
 
                 auto *connCtx = reinterpret_cast<SenderConnectionContext *>(lsquic_conn_get_ctx(
@@ -173,13 +180,12 @@ namespace sender {
                     if (connCtx->manifestSent == total) {
                         lsquic_stream_flush(stream);
                         //wait for manifest ack
-                        lsquic_stream_wantread(stream,1);
+                        lsquic_stream_wantread(stream, 1);
                         //half-close the write side
                         lsquic_stream_shutdown(stream, 1);
                     }
                     return;
                 }
-
 
                 while (true) {
                     if (ctx->sendingHeader) {
@@ -211,22 +217,28 @@ namespace sender {
                         ctx->bytesSent += nw;
                         connCtx->bytesMoved += nw;
 
+
                         if (ctx->bytesSent >= ctx->len) {
                             ctx->currentMmap = nullptr;
                             if (!ctx->loadNextChunk()) {
                                 lsquic_stream_shutdown(stream, 1);
                                 //now wait for receiver ACK
-                                lsquic_stream_wantread(connCtx->manifestStream,1);
+                                lsquic_stream_wantread(connCtx->manifestStream, 1);
                                 return;
                             }
                         }
                     }
                 }
+
+
             },
+
             .on_close = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
                 const auto *ctx = reinterpret_cast<SenderStreamContext *>(h);
+                spdlog::error("Stream closed : {}", ctx->id);
                 delete ctx;
             },
+
             .on_hsk_done = [](lsquic_conn_t *connection, enum lsquic_hsk_status status) {
                 if (status == LSQ_HSK_OK || status == LSQ_HSK_RESUMED_OK) {
                     spdlog::info("QUIC Handshake Successful");
@@ -234,6 +246,7 @@ namespace sender {
                     spdlog::error("QUIC Handshake Failed");
                 }
             },
+
             .on_conncloseframe_received = [](lsquic_conn_t *c, int app_error, uint64_t error_code, const char *reason,
                                              int reason_len) {
                 spdlog::error("PEER REJECTED CONNECTION! Code: {}, Reason: {:.{}s}",
@@ -261,7 +274,6 @@ namespace sender {
             settings.es_init_max_stream_data_bidi_remote = SenderConfig::quicStreamWindowBytes;
             settings.es_handshake_to = 30000000;
             settings.es_allow_migration = 0;
-
 
 
             char err_buf[256];
@@ -296,7 +308,7 @@ namespace sender {
             ctx->streamId = streamId;
             ctx->receiverId = receiverId;
 
-            nice_address_copy_to_sockaddr(&local->base_addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
+            nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
             nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));
 
 

@@ -17,11 +17,11 @@
 namespace receiver {
     class ReceiverStream : public common::Stream {
         static void watchProgress() {
-            ReceiverConnectionContext *ctx = static_cast<ReceiverConnectionContext *>(connectionContexts_[0]);
+            auto *ctx = static_cast<ReceiverConnectionContext *>(connectionContexts_[0]);
             ctx->startTime = std::chrono::high_resolution_clock::now();
 
             g_timeout_add_full(G_PRIORITY_HIGH, 1000, [](gpointer data)-> gboolean {
-                ReceiverConnectionContext *receiverConnectionContext = static_cast<ReceiverConnectionContext *>(
+                auto *receiverConnectionContext = static_cast<ReceiverConnectionContext *>(
                     connectionContexts_[0]);
                 if (!receiverConnectionContext) {
                     return G_SOURCE_CONTINUE;
@@ -138,6 +138,7 @@ namespace receiver {
                 common::ThreadManager::terminate();
             },
             .on_new_stream = [](void *stream_if_ctx, lsquic_stream_t *stream) -> lsquic_stream_ctx_t * {
+                spdlog::warn("New stream!!!!");
                 lsquic_stream_wantread(stream, 1);
                 return reinterpret_cast<lsquic_stream_ctx_t *>(new ReceiverStreamContext());
             },
@@ -152,6 +153,7 @@ namespace receiver {
                         ctx->type = (tag == 0x00)
                                         ? ReceiverStreamContext::MANIFEST
                                         : ReceiverStreamContext::DATA;
+                        spdlog::info("Type detected : {}", ctx->type == ReceiverStreamContext::MANIFEST ? "MANIFEST" : "DATA");
                         if (ctx->type == ReceiverStreamContext::DATA && !connCtx->started) {
                             connCtx->started = true;
                             watchProgress();
@@ -243,7 +245,7 @@ namespace receiver {
                             //transfer complete. needs to send ACK to sender..
                             connCtx->complete = true;
                             connCtx->pendingCompleteAck = true;
-                            // lsquic_stream_wantwrite(connCtx->manifestStream,1);
+                            lsquic_stream_wantwrite(connCtx->manifestStream,1);
                             // lsquic_stream_shutdown(stream,0);
                             return;
                         }
@@ -337,7 +339,7 @@ namespace receiver {
             auto *ctx = new ReceiverConnectionContext();
             ctx->agent = agent;
             ctx->streamId = streamId;
-            nice_address_copy_to_sockaddr(&local->base_addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
+            nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
             nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));
 
 

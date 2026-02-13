@@ -20,7 +20,7 @@ public:
     inline static std::string turnServers;
     inline static bool testTurn = false;
     inline static std::int64_t quicStreamWindowBytes = 67108864;
-    inline static int quicMaxIncomingStreams = 256;
+    inline static int quicMaxIncomingStreams = 100;
     inline static int chunkSize = 16384;
     inline static int totalConnections = 1;
     inline static int totalStreams = 8;

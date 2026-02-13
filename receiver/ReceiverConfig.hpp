@@ -20,7 +20,7 @@ namespace receiver {
 
         inline static int quicConnWindowBytes = 536870912;
         inline static int quicStreamWindowBytes = 67108864;
-        inline static int quicMaxIncomingStreams = 256;
+        inline static int quicMaxIncomingStreams = 100;
 
         inline static int totalConnections = 1;
         inline static int totalStreams = 8;
