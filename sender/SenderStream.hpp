@@ -264,6 +264,7 @@ namespace sender {
             settings.es_init_max_stream_data_bidi_remote = SenderConfig::quicStreamWindowBytes;
             settings.es_handshake_to = 30000000;
             settings.es_allow_migration = 0;
+            settings.es_pace_packets = 0;
 
 
             char err_buf[256];
@@ -315,16 +316,16 @@ namespace sender {
                                                                (sockaddr *) &c->remoteAddr,
                                                                c, 0);
 
-                                       if (!c->processScheduled) {
-                                           c->processScheduled = true;
-                                           g_idle_add_full(G_PRIORITY_HIGH, [](gpointer data)-> gboolean {
-                                               auto *context = static_cast<common::ConnectionContext *>(data);
-                                               process();
-                                               context->processScheduled = false;
-                                               return G_SOURCE_REMOVE;
-                                           }, c, nullptr);
-                                       }
-                                       // process();
+                                       // if (!c->processScheduled) {
+                                       //     c->processScheduled = true;
+                                       //     g_idle_add_full(G_PRIORITY_HIGH, [](gpointer data)-> gboolean {
+                                       //         auto *context = static_cast<common::ConnectionContext *>(data);
+                                       //         process();
+                                       //         context->processScheduled = false;
+                                       //         return G_SOURCE_REMOVE;
+                                       //     }, c, nullptr);
+                                       // }
+                                       process();
                                    },
                                    ctx
             );
