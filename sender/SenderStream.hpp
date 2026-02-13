@@ -267,7 +267,7 @@ namespace sender {
             settings.es_allow_migration = 0;
             settings.es_pace_packets = 0;
             settings.es_delayed_acks = 0;
-            settings.es_max_batch_size = 64;
+            settings.es_max_batch_size = 256;
             settings.es_rw_once = 1;
 
 
