@@ -343,6 +343,7 @@ namespace sender {
             ctx->agent = agent;
             ctx->streamId = streamId;
             ctx->receiverId = receiverId;
+            ctx->initializeUI(ctx->receiverId + ": ");
 
             nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
             nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));
