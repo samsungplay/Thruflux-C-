@@ -236,7 +236,7 @@ namespace receiver {
                             lsquic_stream_wantread(stream, 0);
                             break;
                         }
-                        if (nr < 0) {
+                        if (nr < 0 && errno != 35) {
                             spdlog::error("Error while reading manifest stream {}",errno);
                         }
                     }
