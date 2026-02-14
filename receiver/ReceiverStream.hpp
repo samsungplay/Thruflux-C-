@@ -275,6 +275,7 @@ namespace receiver {
                             const uint64_t chunkInFile = ctx->chunkOffset / common::CHUNK_SIZE;
                             const uint64_t globalChunk = connCtx->fileChunkBase[ctx->fileId] + chunkInFile;
                             common::Utils::setBit(connCtx->resumeBitmap, globalChunk);
+                            connCtx->isResumeBitmapDirty = true;
                             //persist bitmap periodically here
                             ctx->readingHeader = true;
                             ctx->headerBytesRead = 0;
