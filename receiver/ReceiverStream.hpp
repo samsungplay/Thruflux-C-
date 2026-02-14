@@ -455,7 +455,6 @@ namespace receiver {
             nice_agent_attach_recv(agent, streamId, 1, common::ThreadManager::getContext(),
                                    [](NiceAgent *agent, guint stream_id, guint component_id,
                                       guint len, gchar *buf, gpointer user_data) {
-                                       spdlog::info("recv packet");
                                        auto *c = static_cast<common::ConnectionContext *>(user_data);
 
                                        lsquic_engine_packet_in(engine_, (unsigned char *) buf, len,
