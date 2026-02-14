@@ -256,6 +256,7 @@ namespace sender {
                 }
 
 
+                spdlog::info("ON_WRITE INVOKED");
                 if (ctx->isManifestStream) {
 
                     size_t total = senderPersistentContext.manifestBlob.size();
