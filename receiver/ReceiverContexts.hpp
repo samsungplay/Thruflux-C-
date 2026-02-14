@@ -11,7 +11,6 @@ namespace receiver {
         uint64_t totalExpectedBytes = 0;
         int totalExpectedFilesCount = 0;
         std::vector<uint64_t> fileSizes;
-        std::vector<uint64_t> perFileBytesWritten;
         bool pendingManifestAck = false;
         bool pendingCompleteAck = false;
         std::unique_ptr<indicators::ProgressBar> progressBar;
@@ -22,6 +21,9 @@ namespace receiver {
         size_t manifestAckSent = 0;
         std::chrono::high_resolution_clock::time_point lastResumeBitmapFlush{};
         bool isResumeBitmapDirty = false;
+        std::vector<uint32_t> fileTotalChunks;
+        std::vector<uint32_t> fileDoneChunks;
+        std::vector<uint8_t> fileCountedDone;
 
         void createProgressBar(std::string prefix) {
             progressBar = common::Utils::createProgressBarUniquePtr(prefix);
@@ -34,7 +36,6 @@ namespace receiver {
             memcpy(&count, p, 4);
             p += 4;
             fileSizes.resize(count);
-            perFileBytesWritten.resize(count, 0);
 
             for (int i = 0; i < count; i++) {
                 uint32_t id;
@@ -63,6 +64,16 @@ namespace receiver {
             for (int id = 0; id < fileSizes.size(); id++) {
                 fileChunkBase[id] = totalChunks;
                 totalChunks += common::Utils::ceilDiv(fileSizes[id], common::CHUNK_SIZE);
+            }
+
+            fileTotalChunks.resize(fileSizes.size());
+            fileDoneChunks.assign(fileSizes.size(), 0);
+            fileCountedDone.assign(fileSizes.size(), 0);
+
+            for (uint32_t id = 0; id < fileSizes.size(); ++id) {
+                fileTotalChunks[id] = static_cast<uint32_t>(
+                    common::Utils::ceilDiv(fileSizes[id], common::CHUNK_SIZE)
+                );
             }
 
             const size_t bitmapBytes = (totalChunks + 7) / 8;
@@ -94,6 +105,25 @@ namespace receiver {
                 }
 
                 if (loaded) {
+
+                    filesMoved = 0;
+                    for (uint32_t id = 0; id < fileSizes.size(); ++id) {
+                        const uint64_t base = fileChunkBase[id];
+                        const uint32_t chunks = fileTotalChunks[id];
+
+                        uint32_t done = 0;
+                        for (uint32_t c = 0; c < chunks; ++c) {
+                            const uint64_t g = base + c;
+                            if (g < totalChunks && common::Utils::getBit(resumeBitmap, g)) done++;
+                        }
+                        fileDoneChunks[id] = done;
+
+                        if (chunks == 0 || done == chunks) {
+                            fileCountedDone[id] = 1;
+                            filesMoved++;
+                        }
+                    }
+
                     uint64_t resumedChunks = 0;
                     for (uint8_t b: resumeBitmap) {
                         resumedChunks += __builtin_popcount(b);

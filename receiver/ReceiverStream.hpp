@@ -275,10 +275,6 @@ namespace receiver {
                         uint64_t writePos = ctx->chunkOffset + ctx->bodyBytesRead;
                         ssize_t nw = pwrite(fd, ctx->writeBuffer, nr, writePos);
                         connCtx->bytesMoved += nw;
-                        connCtx->perFileBytesWritten[ctx->fileId] += nw;
-                        if (connCtx->perFileBytesWritten[ctx->fileId] == connCtx->fileSizes[ctx->fileId]) {
-                            connCtx->filesMoved++;
-                        }
 
                         if (nw < 0) {
                             spdlog::error("Could not write to disk: {}", errno);
@@ -291,9 +287,19 @@ namespace receiver {
                         if (ctx->bodyBytesRead >= ctx->chunkLength) {
                             const uint64_t chunkInFile = ctx->chunkOffset / common::CHUNK_SIZE;
                             const uint64_t globalChunk = connCtx->fileChunkBase[ctx->fileId] + chunkInFile;
-                            common::Utils::setBit(connCtx->resumeBitmap, globalChunk);
-                            connCtx->isResumeBitmapDirty = true;
-                            //persist bitmap periodically here
+                            if (globalChunk < connCtx->totalChunks) {
+                                if (!common::Utils::getBit(connCtx->resumeBitmap, globalChunk)) {
+                                    common::Utils::setBit(connCtx->resumeBitmap, globalChunk);
+                                    connCtx->fileDoneChunks[ctx->fileId]++;
+                                    if (!connCtx->fileCountedDone[ctx->fileId] &&
+                                        connCtx->fileDoneChunks[ctx->fileId] >= connCtx->fileTotalChunks[ctx->fileId]) {
+                                        connCtx->fileCountedDone[ctx->fileId] = 1;
+                                        connCtx->filesMoved++;
+                                    }
+                                    connCtx->isResumeBitmapDirty = true;
+                                }
+                            }
+
                             ctx->readingHeader = true;
                             ctx->headerBytesRead = 0;
                         }
