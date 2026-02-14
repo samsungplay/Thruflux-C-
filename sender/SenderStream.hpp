@@ -118,7 +118,7 @@ namespace sender {
                     } else {
                         auto &progressBar = senderPersistentContext.progressBars[ctx->progressBarIndex];
                         progressBar.set_option(
-                           indicators::option::ForegroundColor{indicators::Color::red});
+                            indicators::option::ForegroundColor{indicators::Color::red});
                         progressBar.set_option(indicators::option::PostfixText{" [FAILED]"});
                         senderPersistentContext.progressBars.print_progress();
                     }
@@ -158,39 +158,59 @@ namespace sender {
                     lsquic_stream_conn(stream)));
 
                 if (ctx->isManifestStream) {
-                    uint8_t buf[1];
-                    const auto nr = lsquic_stream_read(stream, buf, 1);
+                    uint8_t tmp[4096];
+                    const ssize_t nr = lsquic_stream_read(stream, tmp, sizeof(tmp));
+                    if (nr > 0) {
+                        connCtx->ackBuf.insert(connCtx->ackBuf.end(), tmp, tmp + nr);
+                    }
 
-                    if (nr == 1) {
-                        if (buf[0] == common::RECEIVER_MANIFEST_RECEIVED_ACK) {
-                            //Time to blast data!
-                            if (!connCtx->started) {
-                                auto &progressBar = senderPersistentContext.progressBars[connCtx->progressBarIndex];
-                                progressBar.set_option(
-                                    indicators::option::PostfixText{"starting..."});
-                                progressBar.set_progress(0);
-                                connCtx->started = true;
-                                connCtx->startTime = std::chrono::high_resolution_clock::now();
-                            }
+                    if (connCtx->ackBuf.empty()) return;
+
+                    const uint8_t code = connCtx->ackBuf[0];
+
+                    if (code == common::RECEIVER_MANIFEST_RECEIVED_ACK && connCtx->ackBuf.size() >= 5) {
+                        uint32_t len = 0;
+                        memcpy(&len, connCtx->ackBuf.data() + 1, 4);
+                        const size_t need = 5ull + static_cast<size_t>(len);
+                        if (connCtx->ackBuf.size() < need) {
+                            return;
+                        }
+                        connCtx->resumeBitmap.assign(connCtx->ackBuf.begin() + 5,
+                               connCtx->ackBuf.begin() + need);
+
+                        connCtx->ackBuf.erase(connCtx->ackBuf.begin(),
+                          connCtx->ackBuf.begin() + need);
 
 
-                            //save the manifest stream for reading future ack
-                            connCtx->manifestStream = stream;
 
-                            lsquic_stream_wantread(stream, 0);
+                        //Time to blast data!
+                        if (!connCtx->started) {
+                            auto &progressBar = senderPersistentContext.progressBars[connCtx->progressBarIndex];
+                            progressBar.set_option(
+                                indicators::option::PostfixText{"starting..."});
+                            progressBar.set_progress(0);
+                            connCtx->started = true;
+                            connCtx->startTime = std::chrono::high_resolution_clock::now();
+                        }
 
-                            //Open all the streams
-                            for (int i = 0; i < SenderConfig::totalStreams; i++) {
-                                lsquic_conn_make_stream(connCtx->connection);
-                            }
-                        } else if (buf[0] == common::RECEIVER_TRANSFER_COMPLETE_ACK) {
-                            connCtx->complete = true;
-                            connCtx->endTime = std::chrono::high_resolution_clock::now();
-                            lsquic_stream_shutdown(stream, 0);
-                            if (connCtx->connection) {
-                                lsquic_conn_close(connCtx->connection);
-                                connCtx->connection = nullptr;
-                            }
+
+                        //save the manifest stream for reading future ack
+                        connCtx->manifestStream = stream;
+
+                        lsquic_stream_wantread(stream, 0);
+
+                        //Open all the streams
+                        for (int i = 0; i < SenderConfig::totalStreams; i++) {
+                            lsquic_conn_make_stream(connCtx->connection);
+                        }
+                    } else if (code == common::RECEIVER_TRANSFER_COMPLETE_ACK) {
+                        connCtx->ackBuf.erase(connCtx->ackBuf.begin());
+                        connCtx->complete = true;
+                        connCtx->endTime = std::chrono::high_resolution_clock::now();
+                        lsquic_stream_shutdown(stream, 0);
+                        if (connCtx->connection) {
+                            lsquic_conn_close(connCtx->connection);
+                            connCtx->connection = nullptr;
                         }
                     }
                 }

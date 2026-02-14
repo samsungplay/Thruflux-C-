@@ -13,6 +13,7 @@
 namespace common {
     inline constexpr char RECEIVER_MANIFEST_RECEIVED_ACK = 0x06;
     inline constexpr char RECEIVER_TRANSFER_COMPLETE_ACK = 0x07;
+    inline static constexpr uint64_t CHUNK_SIZE = 1024 * 1024;
 
     struct FileHandleCache {
         struct Entry {

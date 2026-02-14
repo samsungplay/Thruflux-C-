@@ -12,6 +12,26 @@
 namespace common {
     class Utils {
     public:
+
+        static uint64_t fnv1a64(const uint8_t* data, const size_t len) {
+            uint64_t hash = 1469598103934665603ull;
+            for (size_t i = 0; i < len; ++i) {
+                hash ^= data[i];
+                hash *= 1099511628211ull;
+            }
+            return hash;
+        }
+
+        static size_t ceilDiv(uint64_t a, uint64_t b) { return (a + b - 1) / b; }
+
+        static bool getBit(const std::vector<uint8_t> &bm, uint64_t idx) {
+            return (bm[idx >> 3] >> (idx & 7)) & 1;
+        }
+
+        static void setBit(std::vector<uint8_t> &bm, uint64_t idx) {
+            bm[idx >> 3] |= uint8_t(1u << (idx & 7));
+        }
+
         static std::unique_ptr<indicators::ProgressBar> createProgressBarUniquePtr(const std::string prefix) {
             return std::unique_ptr<indicators::ProgressBar>(new indicators::ProgressBar(
                 indicators::option::BarWidth(32),

@@ -52,6 +52,8 @@ namespace sender {
         const size_t MAX_MMAPS = 16;
         std::list<std::unique_ptr<indicators::ProgressBar> > progressBarsStorage;
         indicators::DynamicProgress<indicators::ProgressBar> progressBars;
+        std::vector<uint64_t> fileChunkBase;
+        uint64_t totalChunks = 0;
 
         void buildManifest(const std::vector<std::string> &paths) {
             files.clear();
@@ -139,10 +141,10 @@ namespace sender {
             totalExpectedFilesCount = filesCount;
 
             size_t estimatedSize = 4;
-            for(const auto& f : files) estimatedSize += (14 + f.relativePath.size());
+            for (const auto &f: files) estimatedSize += (14 + f.relativePath.size());
             manifestBlob.clear();
             manifestBlob.resize(estimatedSize);
-            uint8_t* p = manifestBlob.data();
+            uint8_t *p = manifestBlob.data();
             const uint32_t count = static_cast<uint32_t>(files.size());
             memcpy(p, &count, 4);
             p += 4;
@@ -157,6 +159,13 @@ namespace sender {
                 p += 2;
                 memcpy(p, f.relativePath.data(), nl);
                 p += nl;
+            }
+
+            fileChunkBase.resize(files.size());
+            totalChunks = 0;
+            for (const auto &f: files) {
+                fileChunkBase[f.id] = totalChunks;
+                totalChunks += common::Utils::ceilDiv(f.size, common::CHUNK_SIZE);
             }
 
             scannerBar.set_option(indicators::option::PrefixText{"Manifest Sealed. "});
@@ -203,6 +212,8 @@ namespace sender {
         bool manifestCreated = false;
         size_t manifestSent = 0;
         size_t progressBarIndex = 0;
+        std::vector<uint8_t> ackBuf;
+        std::vector<uint8_t> resumeBitmap;
     };
 
     struct SenderStreamContext {
@@ -228,7 +239,7 @@ namespace sender {
                 auto &f = senderPersistentContext.files[connectionContext->currentFileIndex];
                 const uint64_t off = connectionContext->currentFileOffset;
 
-                connectionContext->currentFileOffset += 1024 * 1024;
+                connectionContext->currentFileOffset += common::CHUNK_SIZE;
 
                 if (off >= f.size) {
                     connectionContext->currentFileIndex++;
@@ -237,9 +248,19 @@ namespace sender {
                     continue;
                 }
 
+                if (!connectionContext->resumeBitmap.empty()) {
+                    const uint64_t chunkInFile = off / common::CHUNK_SIZE;
+                    const uint64_t globalChunk =
+                            senderPersistentContext.fileChunkBase[f.id] + chunkInFile;
+                    if (globalChunk < senderPersistentContext.totalChunks &&
+                        common::Utils::getBit(connectionContext->resumeBitmap, globalChunk)) {
+                        continue;
+                    }
+                }
+
                 fileId = f.id;
                 offset = off;
-                len = std::min(static_cast<uint64_t>(1024) * 1024, f.size - off);
+                len = std::min(common::CHUNK_SIZE, f.size - off);
                 bytesSent = 0;
 
                 currentMmap = senderPersistentContext.getMmap(fileId);

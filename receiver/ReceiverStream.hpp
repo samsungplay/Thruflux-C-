@@ -76,11 +76,11 @@ namespace receiver {
                 postfix += "/";
                 postfix += std::to_string(receiverConnectionContext->totalExpectedFilesCount);
                 receiverConnectionContext->progressBar->set_option(indicators::option::PostfixText{postfix});
-                receiverConnectionContext->progressBar->set_progress(p);
-;
+                receiverConnectionContext->progressBar->set_progress(p);;
                 receiverConnectionContext->lastTime = now;
                 receiverConnectionContext->lastBytesMoved = receiverConnectionContext->bytesMoved;
 
+                receiverConnectionContext->maybeSaveBitmap();
                 return G_SOURCE_CONTINUE;
             }, nullptr, nullptr);
         }
@@ -153,11 +153,13 @@ namespace receiver {
                         postfix += " [DONE]";
                         progressBar->set_option(indicators::option::PostfixText{postfix});
                         progressBar->set_progress(100);
+                        ctx->deleteResumeBitmap();
                     } else {
                         const auto &progressBar = ctx->progressBar;
                         progressBar->set_option(indicators::option::PostfixText(" [FAILED]"));
                         progressBar->set_option(
                             indicators::option::ForegroundColor{indicators::Color::red});
+                        ctx->maybeSaveBitmap(true);
                     }
                     ctx->connection = nullptr;
                 }
@@ -194,6 +196,10 @@ namespace receiver {
                 if (ctx->type == ReceiverStreamContext::MANIFEST) {
                     uint8_t tmp[4096];
                     while (!connCtx->manifestParsed) {
+                        if (!connCtx->manifestReceiveStartMessagePrinted) {
+                            connCtx->manifestReceiveStartMessagePrinted = true;
+                            spdlog::info("Fetching catalogue from sender...");
+                        }
                         const auto nr = lsquic_stream_read(stream, tmp, sizeof(tmp));
                         if (nr > 0) connCtx->manifestBuf.insert(connCtx->manifestBuf.end(), tmp, tmp + nr);
                         if (nr == 0) {
@@ -266,6 +272,10 @@ namespace receiver {
                         ctx->bodyBytesRead += nw;
 
                         if (ctx->bodyBytesRead >= ctx->chunkLength) {
+                            const uint64_t chunkInFile = ctx->chunkOffset / common::CHUNK_SIZE;
+                            const uint64_t globalChunk = connCtx->fileChunkBase[ctx->fileId] + chunkInFile;
+                            common::Utils::setBit(connCtx->resumeBitmap, globalChunk);
+                            //persist bitmap periodically here
                             ctx->readingHeader = true;
                             ctx->headerBytesRead = 0;
                         }
@@ -289,17 +299,40 @@ namespace receiver {
 
                 if (ctx->type == ReceiverStreamContext::MANIFEST) {
                     if (connCtx->pendingManifestAck) {
+
                         uint8_t ack = common::RECEIVER_MANIFEST_RECEIVED_ACK;
-                        const auto nw = lsquic_stream_write(stream, &ack, 1);
-                        if (nw == 1) {
+                        uint32_t len = static_cast<uint32_t>(connCtx->resumeBitmap.size());
+                        uint8_t hdr[5];
+                        hdr[0] = ack;
+                        memcpy(hdr + 1, &len, 4);
+                        const uint8_t *src = nullptr;
+                        size_t remaining = 0;
+
+                        if (connCtx->manifestAckSent < 5) {
+                            src = hdr + connCtx->manifestAckSent;
+                            remaining = 5 - connCtx->manifestAckSent;
+                        } else {
+                            const size_t payloadOff = connCtx->manifestAckSent - 5;
+                            src = connCtx->resumeBitmap.data() + payloadOff;
+                            remaining = connCtx->resumeBitmap.size() - payloadOff;
+                        }
+
+                        const ssize_t nw = lsquic_stream_write(stream, src, remaining);
+
+                        if (nw > 0) {
+                            connCtx->manifestAckSent += nw;
+                        }
+
+                        const auto total = 5ull + connCtx->resumeBitmap.size();
+
+                        if (connCtx->manifestAckSent >= total) {
                             lsquic_stream_flush(stream);
                             connCtx->pendingManifestAck = false;
-                            //save the manifest stream for writing future ACK
                             connCtx->manifestStream = stream;
-                            lsquic_stream_wantwrite(stream, 0);
+                            lsquic_stream_wantwrite(stream,0);
                         }
                     }
-                    if (connCtx->pendingCompleteAck) {
+                    else if (connCtx->pendingCompleteAck) {
                         uint8_t ack = common::RECEIVER_TRANSFER_COMPLETE_ACK;
                         const auto nw = lsquic_stream_write(stream, &ack, 1);
                         if (nw == 1) {

@@ -26,8 +26,7 @@ namespace receiver {
         inline static int totalStreams = 4;
         inline static int chunkSize = 16384;
 
-        inline static bool noResume = false;
-        inline static bool yesResume = false;
+        inline static bool overwrite = false;
 
         inline static int udpBufferBytes = 8388608;
 
@@ -49,8 +48,7 @@ namespace receiver {
             app.add_option("--total-connections", totalConnections)->capture_default_str();
             app.add_option("--total-streams", totalStreams)->capture_default_str();
             app.add_option("--chunk-size", chunkSize)->capture_default_str();
-            app.add_flag("--no-resume", noResume);
-            app.add_flag("--yes-resume", yesResume);
+            app.add_flag("--overwrite", overwrite);
             app.add_option("--udp-buffer-bytes", udpBufferBytes)->capture_default_str();
             app.add_flag("--benchmark", benchmark);
             app.add_flag("--verbose", verbose);
