@@ -104,10 +104,12 @@ namespace receiver {
                     const auto resumedBytes = std::min(resumedChunks * common::CHUNK_SIZE, totalExpectedBytes);
 
                     spdlog::info(
-                        "Auto-resuming: {:.2f}% already present ({} / {}). Pass flag --overwrite to disable.",
+                        "Auto-resuming: {:.2f}% already present ({} / {}) ({} / {}). Pass flag --overwrite to disable.",
                         percent,
                         common::Utils::sizeToReadableFormat(resumedBytes),
-                        common::Utils::sizeToReadableFormat(totalExpectedBytes)
+                        common::Utils::sizeToReadableFormat(totalExpectedBytes),
+                        resumedChunks,
+                        totalChunks
                     );
                 }
             }
