@@ -140,7 +140,8 @@ namespace common {
                     batchSize++;
                 }
 
-                const int nSent = nice_agent_send_messages_nonblocking(
+
+                const int nSent = ctx->agent ? nice_agent_send_messages_nonblocking(
                     ctx->agent,
                     ctx->streamId,
                     1,
@@ -148,7 +149,7 @@ namespace common {
                     batchSize,
                     nullptr,
                     nullptr
-                );
+                ) : -1;
 
 
                 if (nSent < 0) {
