@@ -237,7 +237,7 @@ namespace receiver {
                             break;
                         }
                         if (nr < 0) {
-                            spdlog::error("Error while reading manifest stream");
+                            spdlog::error("Error while reading manifest stream {}",nr);
                         }
                     }
                     return;

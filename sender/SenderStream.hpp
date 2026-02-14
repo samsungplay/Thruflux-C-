@@ -268,7 +268,7 @@ namespace sender {
                     }
                     if (connCtx->manifestSent == total) {
                         lsquic_stream_flush(stream);
-                        //half-close the write side
+                        //send FIN bit
                         lsquic_stream_shutdown(stream, 1);
                         //wait for manifest ack
                         lsquic_stream_wantread(stream, 1);
