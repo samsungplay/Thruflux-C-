@@ -35,7 +35,7 @@ int main(const int argc, char **argv) {
 
     ix::initNetSystem();
 
-    // receiver::ReceiverStream::initialize();
+    receiver::ReceiverStream::initialize();
     ix::WebSocket socketClient;
     socketClient.disableAutomaticReconnection();
 
