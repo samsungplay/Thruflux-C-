@@ -153,6 +153,7 @@ namespace receiver {
                         progressBar->set_option(indicators::option::PostfixText{postfix});
                         progressBar->set_progress(100);
                         progressBar->mark_as_completed();
+                        std::cout << "\n" << std::flush;
                         const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
                         spdlog::info("Transfer completed.");
                         spdlog::info("Time taken: {}s", diff.count());
@@ -375,6 +376,10 @@ namespace receiver {
             ctx->agent = agent;
             ctx->streamId = streamId;
             ctx->createProgressBar("Receiving ");
+            ctx->progressBar->set_option(
+                     indicators::option::PostfixText{"starting..."});
+            ctx->progressBar->set_progress(0);
+
 
             nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
             nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));

@@ -116,6 +116,7 @@ namespace sender {
                         progressBar.set_progress(100);
                         senderPersistentContext.progressBars.print_progress();
                         progressBar.mark_as_completed();
+                        std::cout << "\n" << std::flush;
                         const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
                         spdlog::info("Transfer completed for receiver {}", ctx->receiverId);
                         spdlog::info("Time taken: {}s", diff.count());
