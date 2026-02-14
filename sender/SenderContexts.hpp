@@ -105,7 +105,7 @@ namespace sender {
                 }
             }
 
-            scannerBar.set_option(indicators::option::PostfixText{"Parsing files..."});
+            scannerBar.set_option(indicators::option::PostfixText{"Parsing files...           "});
 
             totalExpectedBytes = size;
             totalExpectedFilesCount = filesCount;
