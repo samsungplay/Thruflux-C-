@@ -14,8 +14,6 @@ int main(const int argc, char **argv) {
 
     common::IceHandler::initialize();
 
-    spdlog::info("?");
-
     std::vector<std::string> rawStunUrls;
     boost::split(rawStunUrls, receiver::ReceiverConfig::stunServers, boost::is_any_of(","), boost::token_compress_on);
 

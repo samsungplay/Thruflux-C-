@@ -47,6 +47,7 @@ namespace common {
         static void runMainLoop() {
             context_ = g_main_context_default();
             mainLoop_ = g_main_loop_new(context_, FALSE);
+            spdlog::info("Ahh");
             g_main_loop_run(mainLoop_);
             g_main_loop_quit(mainLoop_);
             g_main_loop_unref(mainLoop_);
