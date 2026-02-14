@@ -103,7 +103,7 @@ namespace sender {
                                   indicators::option::ForegroundColor{indicators::Color::green});
                         std::string postfix;
                         postfix.reserve(128);
-                        postfix += " sent";
+                        postfix += " sent ";
                         postfix += common::Utils::sizeToReadableFormat(ctx->bytesMoved);
                         postfix += "  files ";
                         postfix += std::to_string(ctx->filesMoved);
