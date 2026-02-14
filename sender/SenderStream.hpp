@@ -114,6 +114,7 @@ namespace sender {
                         postfix += " [DONE]";
                         progressBar.set_option(indicators::option::PostfixText{postfix});
                         progressBar.set_progress(100);
+                        senderPersistentContext.progressBars.print_progress();
                     } else {
                         auto &progressBar = senderPersistentContext.progressBars[ctx->progressBarIndex];
                         progressBar.set_option(
