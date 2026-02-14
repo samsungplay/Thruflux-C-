@@ -240,6 +240,7 @@ namespace common {
 
             auto componentStateChangedCallback = [streamState = std::move(streamState), agent,n
                     ](guint stream_id, guint state) {
+                spdlog::info("ok0");
                 if (streamState->alreadyFired) return;
 
                 spdlog::info("ok1");
