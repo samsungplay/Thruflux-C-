@@ -19,7 +19,7 @@ namespace sender {
         }
 
         static void onClose(ix::WebSocket &socket, std::string_view reason) {
-            spdlog::info("Relay disconnected: {} ", SenderConfig::serverUrl, reason);
+            spdlog::info("Relay disconnected: {} Reason={}", SenderConfig::serverUrl, reason);
             common::ThreadManager::terminate();
         }
 
