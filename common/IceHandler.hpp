@@ -240,17 +240,18 @@ namespace common {
 
             auto componentStateChangedCallback = [streamState = std::move(streamState), agent,n
                     ](guint stream_id, guint state) {
-                spdlog::info("?");
                 if (streamState->alreadyFired) return;
-                spdlog::info("?2");
 
                 if (state == NICE_COMPONENT_STATE_READY) {
                     streamState->readyComponents++;
+                    spdlog::info("ok..");
                     if (streamState->readyComponents == streamState->totalComponents) {
+                        spdlog::info("oh");
                         streamState->alreadyFired = true;
                         streamState->callback(agent, true, stream_id, n);
                     }
                 } else if (state == NICE_COMPONENT_STATE_FAILED) {
+                    spdlog::info("oog");
                     streamState->alreadyFired = true;
                     streamState->callback(nullptr, false, stream_id, n);
                 }
@@ -276,7 +277,6 @@ namespace common {
                                   static_cast<GConnectFlags>(0)
             );
 
-            spdlog::info("3");
 
             if (!nice_agent_gather_candidates(agent, streamId)) {
                 callback(nullptr, false, streamId, -1);
