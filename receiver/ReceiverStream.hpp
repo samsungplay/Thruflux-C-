@@ -17,13 +17,10 @@
 namespace receiver {
     class ReceiverStream : public common::Stream {
         static void watchProgress() {
-            auto *ctx = static_cast<ReceiverConnectionContext *>(connectionContexts_[0]);
-            ctx->startTime = std::chrono::high_resolution_clock::now();
-
             g_timeout_add_full(G_PRIORITY_HIGH, 250, [](gpointer data)-> gboolean {
                 auto *receiverConnectionContext = static_cast<ReceiverConnectionContext *>(
                     connectionContexts_[0]);
-                if (!receiverConnectionContext) {
+                if (!receiverConnectionContext || !receiverConnectionContext->started) {
                     return G_SOURCE_CONTINUE;
                 }
                 if (receiverConnectionContext->complete) {
@@ -179,7 +176,7 @@ namespace receiver {
                                         : ReceiverStreamContext::DATA;
                         if (ctx->type == ReceiverStreamContext::DATA && !connCtx->started) {
                             connCtx->started = true;
-                            watchProgress();
+                            connCtx->startTime = std::chrono::high_resolution_clock::now();
                         }
                     } else {
                         return;
@@ -355,6 +352,7 @@ namespace receiver {
             api.ea_packets_out = sendPackets;
             api.ea_get_ssl_ctx = getSslCtx;
             engine_ = lsquic_engine_new(LSENG_SERVER, &api);
+            watchProgress();
 
             spdlog::info("LSQUIC Engine Successfully Initialized. {}", engine_ == nullptr);
         }
