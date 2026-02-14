@@ -15,7 +15,7 @@ namespace sender {
         static void watchProgress() {
             g_timeout_add_full(
                 G_PRIORITY_HIGH,
-                500,
+                250,
                 [](gpointer) -> gboolean {
                     const auto now = std::chrono::high_resolution_clock::now();
                     const double totalBytes = static_cast<double>(senderPersistentContext.totalExpectedBytes);
@@ -101,7 +101,16 @@ namespace sender {
                         const auto &row = ctx->uiRow;
                         row->progressBar.set_option(
                                   indicators::option::ForegroundColor{indicators::Color::green});
-                        row->progressBar.set_option(indicators::option::PostfixText{"done"});
+                        std::string postfix;
+                        postfix.reserve(128);
+                        postfix += " sent";
+                        postfix += common::Utils::sizeToReadableFormat(ctx->bytesMoved);
+                        postfix += "  files ";
+                        postfix += std::to_string(ctx->filesMoved);
+                        postfix += "/";
+                        postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);
+
+                        row->progressBar.set_option(indicators::option::PostfixText{postfix});
                         row->progressBar.set_progress(100);
                         const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
                         spdlog::info("Transfer completed for receiver {}", ctx->receiverId);

@@ -20,7 +20,7 @@ namespace receiver {
             auto *ctx = static_cast<ReceiverConnectionContext *>(connectionContexts_[0]);
             ctx->startTime = std::chrono::high_resolution_clock::now();
 
-            g_timeout_add_full(G_PRIORITY_HIGH, 500, [](gpointer data)-> gboolean {
+            g_timeout_add_full(G_PRIORITY_HIGH, 250, [](gpointer data)-> gboolean {
                 auto *receiverConnectionContext = static_cast<ReceiverConnectionContext *>(
                     connectionContexts_[0]);
                 if (!receiverConnectionContext) {
@@ -139,9 +139,17 @@ namespace receiver {
                     if (ctx->complete) {
                         const auto &row = ctx->uiRow;
                         row->progressBar.set_option(
-                                  indicators::option::ForegroundColor{indicators::Color::green});
-                        row->progressBar.set_option(indicators::option::PostfixText{"done"});
+                            indicators::option::ForegroundColor{indicators::Color::green});
                         row->progressBar.set_progress(100);
+                        std::string postfix;
+                        postfix.reserve(128);
+                        postfix += " sent";
+                        postfix += common::Utils::sizeToReadableFormat(ctx->bytesMoved);
+                        postfix += "  files ";
+                        postfix += std::to_string(ctx->filesMoved);
+                        postfix += "/";
+                        postfix += std::to_string(ctx->totalExpectedFilesCount);
+                        row->progressBar.set_option(indicators::option::PostfixText{postfix});
 
                         const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
                         spdlog::info("Transfer completed.");
