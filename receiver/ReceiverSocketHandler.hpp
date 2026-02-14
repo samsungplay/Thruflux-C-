@@ -26,7 +26,6 @@ namespace receiver {
 
         static void onMessage(ix::WebSocket &socket, std::string_view message) {
             try {
-                spdlog::info("Relay message: {}", message);
                 nlohmann::json j = nlohmann::json::parse(message);
                 const std::string type = j.value("type", "");
                 if (type == "turn_credentials_payload") {
@@ -42,9 +41,11 @@ namespace receiver {
                                 }
                             }
 
+                            spdlog::info("Local");
+
                             common::IceHandler::gatherLocalCandidates(false, "", ReceiverConfig::totalConnections,
                                                                       [&socket](common::CandidatesResult result) {
-
+                                                            spdlog::info("k");
                                                                           socket.send(nlohmann::json(
                                                                               common::JoinTransferSessionPayload{
                                                                                   .candidatesResult = std::move(result),
