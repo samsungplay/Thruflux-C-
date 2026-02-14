@@ -7,7 +7,6 @@ namespace receiver {
         common::FileHandleCache cache;
         std::vector<uint8_t> manifestBuf;
         bool manifestParsed = false;
-        bool manifestReceiveStartMessagePrinted = false;
         uint64_t totalExpectedBytes = 0;
         int totalExpectedFilesCount = 0;
         std::vector<uint64_t> fileSizes;

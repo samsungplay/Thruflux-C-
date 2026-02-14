@@ -219,10 +219,6 @@ namespace receiver {
                 if (ctx->type == ReceiverStreamContext::MANIFEST) {
                     uint8_t tmp[4096];
                     while (!connCtx->manifestParsed) {
-                        if (!connCtx->manifestReceiveStartMessagePrinted) {
-                            connCtx->manifestReceiveStartMessagePrinted = true;
-                            spdlog::info("Fetching catalogue from sender...");
-                        }
                         //TODO add progress here
                         const auto nr = lsquic_stream_read(stream, tmp, sizeof(tmp));
                         if (nr > 0) {
