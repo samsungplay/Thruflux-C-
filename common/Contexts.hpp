@@ -68,25 +68,7 @@ namespace common {
     };
 
 
-    struct UiRow {
-        indicators::ProgressBar progressBar;
 
-       explicit UiRow(std::string prefix) : progressBar(
-            indicators::option::BarWidth(32),
-            indicators::option::Start("["),
-            indicators::option::Fill("■"),
-            indicators::option::Lead("■"),
-            indicators::option::Remainder("."),
-            indicators::option::End("]"),
-            indicators::option::ShowPercentage(true),
-            indicators::option::ShowElapsedTime(true),
-            indicators::option::ShowRemainingTime(false),
-            indicators::option::PrefixText(std::move(prefix)),
-            indicators::option::MaxProgress(100),
-            indicators::option::ForegroundColor(indicators::Color::cyan)
-        ) {
-        }
-    };
 
     struct ConnectionContext {
         NiceAgent *agent;
@@ -104,11 +86,9 @@ namespace common {
         bool started = false;
         bool complete = false;
         lsquic_stream_t *manifestStream = nullptr;
-        std::shared_ptr<UiRow> uiRow = nullptr;
+
         indicators::ProgressBar* progressBar;
 
-        void initializeUI(std::string prefix) {
-            uiRow = std::make_shared<UiRow>(prefix);
-        }
+
     };
 }

@@ -52,7 +52,6 @@ namespace sender {
         std::list<uint32_t> lruList;
         const size_t MAX_MMAPS = 16;
         int globalCnt =0;
-        std::vector<std::shared_ptr<common::UiRow>> uiRows;
         indicators::DynamicProgress<indicators::ProgressBar> progressBars;
 
         void buildManifest(const std::vector<std::string>& paths) {
@@ -146,10 +145,10 @@ namespace sender {
             return nullptr;
         }
 
-        auto* addUiRow(const std::shared_ptr<common::UiRow> uiRow) {
-            uiRows.push_back(std::move(uiRow));
-            progressBars.push_back(uiRow->progressBar);
-            return &uiRow->progressBar;
+        int addNewProgressBar(std::string prefix) {
+            auto bar = common::Utils::createProgressBar(std::move(prefix));
+            const size_t id = progressBars.push_back(bar);
+            return id;
         }
     };
 
@@ -164,7 +163,7 @@ namespace sender {
         uint64_t currentFileOffset = 0;
         bool manifestCreated = false;
         size_t manifestSent = 0;
-
+        size_t progressBarIndex = 0;
     };
 
     struct SenderStreamContext {

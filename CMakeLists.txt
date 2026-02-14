@@ -66,12 +66,12 @@ set(SHARED_LIBS
         Boost::boost
         OpenSSL::Crypto
         PkgConfig::NICE
+        indicators::indicators
 )
 
 set(SENDER_RECEIVER_SHARED_LIBS
         ixwebsocket::ixwebsocket
         lsquic::lsquic
-        indicators::indicators
 )
 
 target_link_libraries(ThrufluxServer PRIVATE ${SHARED_LIBS} unofficial::uwebsockets::uwebsockets)

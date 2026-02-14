@@ -7,10 +7,44 @@
 #include <boost/url.hpp>
 
 #include "IceHandler.hpp"
+#include <indicators/progress_bar.hpp>
 
 namespace common {
     class Utils {
     public:
+        static std::unique_ptr<indicators::ProgressBar> createProgressBarUniquePtr(const std::string prefix) {
+            return std::unique_ptr<indicators::ProgressBar>(new indicators::ProgressBar(
+                indicators::option::BarWidth(32),
+                indicators::option::Start("["),
+                indicators::option::Fill("■"),
+                indicators::option::Lead("■"),
+                indicators::option::Remainder("."),
+                indicators::option::End("]"),
+                indicators::option::ShowPercentage(true),
+                indicators::option::ShowElapsedTime(true),
+                indicators::option::ShowRemainingTime(false),
+                indicators::option::PrefixText(std::move(prefix)),
+                indicators::option::MaxProgress(100),
+                indicators::option::ForegroundColor(indicators::Color::cyan)
+            ));
+        }
+
+        static indicators::ProgressBar createProgressBar(const std::string prefix) {
+            return indicators::ProgressBar{
+                indicators::option::BarWidth(32),
+                indicators::option::Start("["),
+                indicators::option::Fill("■"),
+                indicators::option::Lead("■"),
+                indicators::option::Remainder("."),
+                indicators::option::End("]"),
+                indicators::option::ShowPercentage(true),
+                indicators::option::ShowElapsedTime(true),
+                indicators::option::ShowRemainingTime(false),
+                indicators::option::PrefixText(std::move(prefix)),
+                indicators::option::MaxProgress(100),
+                indicators::option::ForegroundColor(indicators::Color::cyan)
+            };
+        }
 
         static std::string sizeToReadableFormat(const double size) {
             if (size <= 0.0) return "0 B";
@@ -34,9 +68,9 @@ namespace common {
         }
 
         static std::optional<TurnServer> toTurnServer(const std::string_view raw,
-            std::string user = "",
-            std::string pass = ""
-            ) {
+                                                      std::string user = "",
+                                                      std::string pass = ""
+        ) {
             auto parsedUrl = boost::urls::parse_uri(raw);
             if (!parsedUrl) {
                 return std::nullopt;

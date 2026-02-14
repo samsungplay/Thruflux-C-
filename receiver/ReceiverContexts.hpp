@@ -2,8 +2,6 @@
 #include "../common/Contexts.hpp"
 
 namespace receiver {
-
-
     struct ReceiverConnectionContext : common::ConnectionContext {
         common::FileHandleCache cache;
         std::vector<uint8_t> manifestBuf;
@@ -14,6 +12,11 @@ namespace receiver {
         std::vector<uint64_t> perFileBytesWritten;
         bool pendingManifestAck = false;
         bool pendingCompleteAck = false;
+        std::unique_ptr<indicators::ProgressBar> progressBar;
+
+        void createProgressBar(std::string prefix) {
+            progressBar = common::Utils::createProgressBarUniquePtr(prefix);
+        };
 
 
         void parseManifest() {
@@ -50,8 +53,8 @@ namespace receiver {
     };
 
     struct ReceiverStreamContext {
-
         enum StreamType { UNKNOWN, MANIFEST, DATA } type = UNKNOWN;
+
         bool readingHeader = true;
         uint8_t headerBuf[16];
         uint8_t headerBytesRead = 0;
@@ -60,6 +63,5 @@ namespace receiver {
         uint32_t bodyBytesRead = 0;
         uint32_t fileId = 0;
         uint8_t writeBuffer[1024 * 1024];
-
     };
 }

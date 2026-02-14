@@ -29,9 +29,9 @@ namespace receiver {
                 const auto now = std::chrono::high_resolution_clock::now();
                 if (receiverConnectionContext->lastTime.time_since_epoch().count() == 0) {
                     receiverConnectionContext->lastTime = now;
-                    receiverConnectionContext->uiRow->progressBar.set_option(
+                    receiverConnectionContext->progressBar->set_option(
                         indicators::option::PostfixText{"starting..."});
-                    receiverConnectionContext->uiRow->progressBar.set_progress(0);
+                    receiverConnectionContext->progressBar->set_progress(0);
                     return G_SOURCE_CONTINUE;
                 }
 
@@ -72,8 +72,8 @@ namespace receiver {
                 postfix += std::to_string(receiverConnectionContext->filesMoved);
                 postfix += "/";
                 postfix += std::to_string(receiverConnectionContext->totalExpectedFilesCount);
-                receiverConnectionContext->uiRow->progressBar.set_option(indicators::option::PostfixText{postfix});
-                receiverConnectionContext->uiRow->progressBar.set_progress(p);
+                receiverConnectionContext->progressBar->set_option(indicators::option::PostfixText{postfix});
+                receiverConnectionContext->progressBar->set_progress(p);
 
                 receiverConnectionContext->lastTime = now;
                 receiverConnectionContext->lastBytesMoved = receiverConnectionContext->bytesMoved;
@@ -137,8 +137,8 @@ namespace receiver {
                 lsquic_conn_set_ctx(c, nullptr);
                 if (ctx) {
                     if (ctx->complete) {
-                        const auto &row = ctx->uiRow;
-                        row->progressBar.set_option(
+                        const auto &progressBar = ctx->progressBar;
+                        progressBar->set_option(
                             indicators::option::ForegroundColor{indicators::Color::green});
 
                         std::string postfix;
@@ -150,8 +150,8 @@ namespace receiver {
                         postfix += "/";
                         postfix += std::to_string(ctx->totalExpectedFilesCount);
 
-                        row->progressBar.set_option(indicators::option::PostfixText{postfix});
-                        row->progressBar.set_progress(100);
+                        progressBar->set_option(indicators::option::PostfixText{postfix});
+                        progressBar->set_progress(100);
                         std::cout << "\n" << std::flush;
 
                         const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
@@ -375,7 +375,8 @@ namespace receiver {
             auto *ctx = new ReceiverConnectionContext();
             ctx->agent = agent;
             ctx->streamId = streamId;
-            ctx->initializeUI("Receiving ");
+            ctx->createProgressBar("Receiving ");
+
             nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
             nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));
 
