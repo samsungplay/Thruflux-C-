@@ -28,6 +28,9 @@ namespace sender {
                         if (context->lastTime.time_since_epoch().count() == 0) {
                             context->lastTime = now;
                             context->lastBytesMoved = context->bytesMoved;
+                            context->uiRow->progressBar.set_option(
+                                indicators::option::PostfixText{"starting..."});
+                            context->uiRow->progressBar.set_progress(0);
                             continue;
                         }
 
@@ -100,7 +103,7 @@ namespace sender {
                     if (ctx->complete) {
                         const auto &row = ctx->uiRow;
                         row->progressBar.set_option(
-                                  indicators::option::ForegroundColor{indicators::Color::green});
+                            indicators::option::ForegroundColor{indicators::Color::green});
                         std::string postfix;
                         postfix.reserve(128);
                         postfix += " sent ";

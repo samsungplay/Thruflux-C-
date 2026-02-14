@@ -29,6 +29,9 @@ namespace receiver {
                 const auto now = std::chrono::high_resolution_clock::now();
                 if (receiverConnectionContext->lastTime.time_since_epoch().count() == 0) {
                     receiverConnectionContext->lastTime = now;
+                    receiverConnectionContext->uiRow->progressBar.set_option(
+                        indicators::option::PostfixText{"starting..."});
+                    receiverConnectionContext->uiRow->progressBar.set_progress(0);
                     return G_SOURCE_CONTINUE;
                 }
 
