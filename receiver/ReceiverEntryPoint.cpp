@@ -35,7 +35,7 @@ int main(const int argc, char **argv) {
 
     ix::initNetSystem();
 
-    receiver::ReceiverStream::initialize();
+    // receiver::ReceiverStream::initialize();
     ix::WebSocket socketClient;
     socketClient.disableAutomaticReconnection();
 
@@ -59,12 +59,12 @@ int main(const int argc, char **argv) {
 
     spdlog::info("Connecting to relay... {}", receiver::ReceiverConfig::serverUrl);
 
-    // socketClient.start();
+    socketClient.start();
 
 
     common::ThreadManager::runMainLoop();
 
-    // socketClient.stop();
+    socketClient.stop();
 
     common::IceHandler::destroy();
 
