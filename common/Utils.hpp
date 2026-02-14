@@ -35,11 +35,11 @@ namespace common {
         createProgressBarUniquePtr(std::string prefix) {
             return std::make_unique<indicators::ProgressBar>(
                 indicators::option::BarWidth{40},
-                indicators::option::Start{"╭"},
+                indicators::option::Start{"│"},
                 indicators::option::Fill{"█"},
-                indicators::option::Lead{"▓"},
-                indicators::option::Remainder{"░"},
-                indicators::option::End{"╮"},
+                indicators::option::Lead{"█"},
+                indicators::option::Remainder{"·"},
+                indicators::option::End{"│"},
                 indicators::option::ShowPercentage{true},
                 indicators::option::ShowElapsedTime{true},
                 indicators::option::ShowRemainingTime{true},
@@ -52,7 +52,7 @@ namespace common {
 
         static std::string sizeToReadableFormat(const double size) {
             if (size <= 0.0) return "0B";
-            if (size < 1024.0) return std::format("{:.0f} B", size);
+            if (size < 1024.0) return std::format("{:.0f}B", size);
             int exp = static_cast<int>(std::log(size) / std::log(1024));
             static const std::string units = "KMGTPE";
             exp = std::min(exp, static_cast<int>(units.length()));
