@@ -20,7 +20,7 @@ namespace receiver {
             auto *ctx = static_cast<ReceiverConnectionContext *>(connectionContexts_[0]);
             ctx->startTime = std::chrono::high_resolution_clock::now();
 
-            g_timeout_add_full(G_PRIORITY_HIGH, 1000, [](gpointer data)-> gboolean {
+            g_timeout_add_full(G_PRIORITY_HIGH, 500, [](gpointer data)-> gboolean {
                 auto *receiverConnectionContext = static_cast<ReceiverConnectionContext *>(
                     connectionContexts_[0]);
                 if (!receiverConnectionContext) {
@@ -137,8 +137,14 @@ namespace receiver {
                 lsquic_conn_set_ctx(c, nullptr);
                 if (ctx) {
                     if (ctx->complete) {
-                        spdlog::info("Transfer completed.");
+                        const auto &row = ctx->uiRow;
+                        row->progressBar.set_option(
+                                  indicators::option::ForegroundColor{indicators::Color::green});
+                        row->progressBar.set_option(indicators::option::PostfixText{"done"});
+                        row->progressBar.set_progress(100);
+
                         const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
+                        spdlog::info("Transfer completed.");
                         spdlog::info("Time taken: {}s", diff.count());
                     } else {
                         spdlog::error("Transfer failed.");

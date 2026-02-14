@@ -15,7 +15,7 @@ namespace sender {
         static void watchProgress() {
             g_timeout_add_full(
                 G_PRIORITY_HIGH,
-                1000,
+                500,
                 [](gpointer) -> gboolean {
                     const auto now = std::chrono::high_resolution_clock::now();
                     const double totalBytes = static_cast<double>(senderPersistentContext.totalExpectedBytes);
