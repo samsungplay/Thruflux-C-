@@ -264,7 +264,6 @@ namespace sender {
                         ssize_t nw = lsquic_stream_write(stream, senderPersistentContext.manifestBlob.data() + sent,
                                                          total - sent);
                         if (nw > 0) connCtx->manifestSent += nw;
-                        spdlog::info(nw);
                     }
                     if (connCtx->manifestSent == total) {
                         lsquic_stream_flush(stream);
