@@ -29,7 +29,6 @@ namespace receiver {
                 if (receiverConnectionContext->complete) {
                     return G_SOURCE_REMOVE;
                 }
-                spdlog::info("watching.. {}", receiverConnectionContext->totalExpectedBytes);
                 const auto now = std::chrono::high_resolution_clock::now();
                 if (receiverConnectionContext->lastTime.time_since_epoch().count() == 0) {
                     receiverConnectionContext->lastTime = now;
@@ -42,32 +41,42 @@ namespace receiver {
                 const double elapsedSeconds = elapsed.count();
                 const double deltaSeconds = delta.count();
 
+                const double safeDelta = (deltaSeconds > 1e-6) ? deltaSeconds : 1e-6;
+                const double safeElapsed = (elapsedSeconds > 1e-6) ? elapsedSeconds : 1e-6;
+
                 const double instantThroughput =
                         (receiverConnectionContext->bytesMoved - receiverConnectionContext->lastBytesMoved) /
-                        deltaSeconds;
-                const double averageThroughput = receiverConnectionContext->bytesMoved / elapsedSeconds;
+                        safeDelta;
+                const double averageThroughput = receiverConnectionContext->bytesMoved / safeElapsed;
                 const double ewmaThroughput = receiverConnectionContext->ewmaThroughput == 0
                                                   ? instantThroughput
                                                   : 0.2 * instantThroughput + 0.8 * receiverConnectionContext->
                                                     ewmaThroughput;
                 receiverConnectionContext->ewmaThroughput = ewmaThroughput;
 
-                const double percent = (static_cast<double>(receiverConnectionContext->bytesMoved) /
-                                        receiverConnectionContext->
-                                        totalExpectedBytes) * 100.0;
+                const double totalBytes = receiverConnectionContext->totalExpectedBytes;
+
+                const double percent = (totalBytes <= 0.0)
+                                           ? 0.0
+                                           : (receiverConnectionContext->bytesMoved / totalBytes) * 100.0;
+                int p = static_cast<int>(std::lround(percent));
+                if (p < 0) p = 0;
+                if (p > 100) p = 100;
+
+                std::string postfix;
+                postfix.reserve(128);
+                postfix += common::Utils::sizeToReadableFormat(ewmaThroughput);
+                postfix += "/s  received ";
+                postfix += common::Utils::sizeToReadableFormat(receiverConnectionContext->bytesMoved);
+                postfix += "  files ";
+                postfix += std::to_string(receiverConnectionContext->filesMoved);
+                postfix += "/";
+                postfix += std::to_string(receiverConnectionContext->totalExpectedFilesCount);
+                receiverConnectionContext->uiRow->progressBar.set_option(indicators::option::PostfixText{postfix});
+                receiverConnectionContext->uiRow->progressBar.set_progress(p);
 
                 receiverConnectionContext->lastTime = now;
                 receiverConnectionContext->lastBytesMoved = receiverConnectionContext->bytesMoved;
-
-                spdlog::info(
-                    "Instant Throughput: {}/s | EWMA Throughput: {}/s |  Elapsed: {}s | Average Throughput: {}/s | Total Received: {} | Progress: {}% | Files {}/{} ",
-                    common::Utils::sizeToReadableFormat(instantThroughput),
-                    common::Utils::sizeToReadableFormat(ewmaThroughput), elapsedSeconds,
-                    common::Utils::sizeToReadableFormat(averageThroughput),
-                    common::Utils::sizeToReadableFormat(receiverConnectionContext->bytesMoved), percent,
-                    receiverConnectionContext->filesMoved,
-                    receiverConnectionContext->totalExpectedFilesCount
-                );
 
                 return G_SOURCE_CONTINUE;
             }, nullptr, nullptr);
@@ -129,10 +138,9 @@ namespace receiver {
                 if (ctx) {
                     if (ctx->complete) {
                         spdlog::info("Transfer completed.");
-                        const std::chrono::duration<double> diff =  ctx->endTime - ctx->startTime;
+                        const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
                         spdlog::info("Time taken: {}s", diff.count());
-                    }
-                    else {
+                    } else {
                         spdlog::error("Transfer failed.");
                     }
                     ctx->connection = nullptr;
@@ -176,7 +184,7 @@ namespace receiver {
                             //must write ACK
                             lsquic_stream_wantwrite(stream, 1);
                             //no reading
-                            lsquic_stream_wantread(stream,0);
+                            lsquic_stream_wantread(stream, 0);
                             break;
                         }
                         if (nr < 0) {
@@ -248,8 +256,8 @@ namespace receiver {
                             connCtx->complete = true;
                             connCtx->pendingCompleteAck = true;
                             connCtx->endTime = std::chrono::high_resolution_clock::now();
-                            lsquic_stream_wantwrite(connCtx->manifestStream,1);
-                            lsquic_stream_wantread(stream,0);
+                            lsquic_stream_wantwrite(connCtx->manifestStream, 1);
+                            lsquic_stream_wantread(stream, 0);
                             return;
                         }
                     }
@@ -269,7 +277,7 @@ namespace receiver {
                             connCtx->pendingManifestAck = false;
                             //save the manifest stream for writing future ACK
                             connCtx->manifestStream = stream;
-                            lsquic_stream_wantwrite(stream,0);
+                            lsquic_stream_wantwrite(stream, 0);
                         }
                     }
                     if (connCtx->pendingCompleteAck) {
@@ -278,7 +286,7 @@ namespace receiver {
                         if (nw == 1) {
                             lsquic_stream_flush(stream);
                             connCtx->pendingCompleteAck = false;
-                            lsquic_stream_wantwrite(stream,0);
+                            lsquic_stream_wantwrite(stream, 0);
                         }
                     }
                 }
@@ -349,6 +357,7 @@ namespace receiver {
             auto *ctx = new ReceiverConnectionContext();
             ctx->agent = agent;
             ctx->streamId = streamId;
+            ctx->initializeUI("Receiving ");
             nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
             nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));
 
@@ -357,18 +366,18 @@ namespace receiver {
 
 
             nice_agent_attach_recv(agent, streamId, 1, common::ThreadManager::getContext(),
-                               [](NiceAgent *agent, guint stream_id, guint component_id,
-                                  guint len, gchar *buf, gpointer user_data) {
-                                   auto *c = static_cast<common::ConnectionContext *>(user_data);
+                                   [](NiceAgent *agent, guint stream_id, guint component_id,
+                                      guint len, gchar *buf, gpointer user_data) {
+                                       auto *c = static_cast<common::ConnectionContext *>(user_data);
 
-                                   lsquic_engine_packet_in(engine_, (unsigned char *) buf, len,
-                                                           (sockaddr *) &c->localAddr,
-                                                           (sockaddr *) &c->remoteAddr,
-                                                           c, 0);
-                                   process();
-                               },
-                               ctx
-        );
+                                       lsquic_engine_packet_in(engine_, (unsigned char *) buf, len,
+                                                               (sockaddr *) &c->localAddr,
+                                                               (sockaddr *) &c->remoteAddr,
+                                                               c, 0);
+                                       process();
+                                   },
+                                   ctx
+            );
 
             g_timeout_add(0, engineTick, nullptr);
         }

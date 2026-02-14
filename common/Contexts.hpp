@@ -70,7 +70,6 @@ namespace common {
 
     struct UiRow {
         indicators::ProgressBar progressBar;
-        bool done = false;
 
         explicit UiRow(std::string prefix) : progressBar(
             indicators::option::BarWidth(32),

@@ -21,20 +21,9 @@ namespace sender {
                     const double totalBytes = static_cast<double>(senderPersistentContext.totalExpectedBytes);
 
                     for (const auto &context: connectionContexts_) {
-                        if (!context || !context->started) continue;
+                        if (!context || !context->started || context->complete) continue;
 
                         const auto &row = context->uiRow;
-
-                        if (context->complete) {
-                            if (!row->done) {
-                                row->done = true;
-                                row->progressBar.set_option(
-                                    indicators::option::ForegroundColor{indicators::Color::green});
-                                row->progressBar.set_option(indicators::option::PostfixText{"done"});
-                                row->progressBar.set_progress(100);
-                            }
-                            continue;
-                        }
 
                         if (context->lastTime.time_since_epoch().count() == 0) {
                             context->lastTime = now;
@@ -109,8 +98,13 @@ namespace sender {
                 lsquic_conn_set_ctx(connection, nullptr);
                 if (ctx) {
                     if (ctx->complete) {
-                        spdlog::info("Transfer completed for receiver {}", ctx->receiverId);
+                        const auto &row = ctx->uiRow;
+                        row->progressBar.set_option(
+                                  indicators::option::ForegroundColor{indicators::Color::green});
+                        row->progressBar.set_option(indicators::option::PostfixText{"done"});
+                        row->progressBar.set_progress(100);
                         const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
+                        spdlog::info("Transfer completed for receiver {}", ctx->receiverId);
                         spdlog::info("Time taken: {}s", diff.count());
                     } else {
                         spdlog::error("Transfer failed for receiver {}", ctx->receiverId);
@@ -343,7 +337,7 @@ namespace sender {
             ctx->agent = agent;
             ctx->streamId = streamId;
             ctx->receiverId = receiverId;
-            ctx->initializeUI(ctx->receiverId + ": ");
+            ctx->initializeUI("Receiver ID " + ctx->receiverId + ": ");
 
             nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
             nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));
