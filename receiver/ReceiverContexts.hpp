@@ -122,22 +122,29 @@ namespace receiver {
                          common::Utils::sizeToReadableFormat(totalExpectedBytes));
         }
 
-        uint64_t computeResumedBytes() const {
+        uint64_t computeResumedBytes() {
             uint64_t resumedBytes = 0;
 
             for (uint32_t id = 0; id < fileSizes.size(); ++id) {
                 const uint64_t sz = fileSizes[id];
-                if (sz == 0) continue;
+                if (sz == 0) {
+                    filesMoved++;
+                    continue;
+                }
 
                 const uint64_t base = fileChunkBase[id];
                 const uint64_t chunks = common::Utils::ceilDiv(sz, common::CHUNK_SIZE);
                 const uint64_t fullChunks = (chunks > 0) ? (chunks - 1) : 0;
                 const uint64_t lastChunkSize = sz - fullChunks * common::CHUNK_SIZE;
 
+                bool all = true;
+
                 for (uint64_t c = 0; c < fullChunks; ++c) {
                     const uint64_t g = base + c;
                     if (g < totalChunks && common::Utils::getBit(resumeBitmap, g)) {
                         resumedBytes += common::CHUNK_SIZE;
+                    } else {
+                        all = false;
                     }
                 }
 
@@ -145,7 +152,13 @@ namespace receiver {
                     const uint64_t g = base + (chunks - 1);
                     if (g < totalChunks && common::Utils::getBit(resumeBitmap, g)) {
                         resumedBytes += lastChunkSize;
+                    } else {
+                        all = false;
                     }
+                }
+
+                if (all) {
+                    filesMoved++;
                 }
             }
 
