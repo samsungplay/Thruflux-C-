@@ -302,7 +302,7 @@ namespace receiver {
                                     common::Utils::setBit(connCtx->resumeBitmap, globalChunk);
                                     connCtx->fileDoneChunks[ctx->fileId]++;
                                     if (!connCtx->fileCountedDone[ctx->fileId] &&
-                                        connCtx->fileDoneChunks[ctx->fileId] >= connCtx->fileTotalChunks[ctx->fileId]) {
+                                        connCtx->fileDoneChunks[ctx->fileId] == connCtx->fileTotalChunks[ctx->fileId]) {
                                         connCtx->fileCountedDone[ctx->fileId] = 1;
                                         connCtx->filesMoved++;
                                     }
