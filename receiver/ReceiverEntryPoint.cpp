@@ -13,24 +13,24 @@ int main(const int argc, char **argv) {
     receiver::ReceiverConfig::initialize(argc, argv);
 
     common::IceHandler::initialize();
-    //
-    // std::vector<std::string> rawStunUrls;
-    // boost::split(rawStunUrls, receiver::ReceiverConfig::stunServers, boost::is_any_of(","), boost::token_compress_on);
-    //
-    // for (const auto &rawStunUrl: rawStunUrls) {
-    //     if (auto stunServer = common::Utils::toStunServer(rawStunUrl); stunServer.has_value()) {
-    //         common::IceHandler::addStunServer(stunServer.value());
-    //     }
-    // }
-    //
-    // std::vector<std::string> rawTurnUrls;
-    // boost::split(rawTurnUrls, receiver::ReceiverConfig::turnServers, boost::is_any_of(","), boost::token_compress_on);
-    //
-    // for (const auto &rawTurnUrl: rawTurnUrls) {
-    //     if (auto turnServer = common::Utils::toTurnServer(rawTurnUrl); turnServer.has_value()) {
-    //         common::IceHandler::addTurnServer(turnServer.value());
-    //     }
-    // }
+
+    std::vector<std::string> rawStunUrls;
+    boost::split(rawStunUrls, receiver::ReceiverConfig::stunServers, boost::is_any_of(","), boost::token_compress_on);
+
+    for (const auto &rawStunUrl: rawStunUrls) {
+        if (auto stunServer = common::Utils::toStunServer(rawStunUrl); stunServer.has_value()) {
+            common::IceHandler::addStunServer(stunServer.value());
+        }
+    }
+
+    std::vector<std::string> rawTurnUrls;
+    boost::split(rawTurnUrls, receiver::ReceiverConfig::turnServers, boost::is_any_of(","), boost::token_compress_on);
+
+    for (const auto &rawTurnUrl: rawTurnUrls) {
+        if (auto turnServer = common::Utils::toTurnServer(rawTurnUrl); turnServer.has_value()) {
+            common::IceHandler::addTurnServer(turnServer.value());
+        }
+    }
 
 
     ix::initNetSystem();
@@ -59,12 +59,12 @@ int main(const int argc, char **argv) {
 
     spdlog::info("Connecting to relay... {}", receiver::ReceiverConfig::serverUrl);
 
-    socketClient.start();
+    // socketClient.start();
 
 
     common::ThreadManager::runMainLoop();
 
-    socketClient.stop();
+    // socketClient.stop();
 
     common::IceHandler::destroy();
 
