@@ -151,6 +151,7 @@ namespace receiver {
                         postfix += std::to_string(ctx->totalExpectedFilesCount);
                         row->progressBar.set_option(indicators::option::PostfixText{postfix});
                         std::cout << "\n" << std::flush;
+                        spdlog::warn(ctx->filesMoved);
 
                         const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
                         spdlog::info("Transfer completed.");
@@ -268,8 +269,8 @@ namespace receiver {
 
                         if (!connCtx->complete && connCtx->filesMoved == connCtx->totalExpectedFilesCount) {
                             //transfer complete. needs to send ACK to sender..
-                            spdlog::info("YO: {}", connCtx->filesMoved );
                             connCtx->complete = true;
+                            spdlog::error(connCtx->filesMoved);
                             connCtx->pendingCompleteAck = true;
                             connCtx->endTime = std::chrono::high_resolution_clock::now();
                             lsquic_stream_wantwrite(connCtx->manifestStream, 1);
