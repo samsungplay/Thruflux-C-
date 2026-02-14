@@ -69,7 +69,6 @@ namespace sender {
                         postfix += std::to_string(context->filesMoved);
                         postfix += "/";
                         postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);
-                        spdlog::info(postfix);
 
                         row->progressBar.set_option(indicators::option::PostfixText{postfix});
                         row->progressBar.set_progress(p);
@@ -353,8 +352,9 @@ namespace sender {
             ctx->receiverId = receiverId;
             const auto uiRow = std::make_shared<common::UiRow>("Receiver ID: " + ctx->receiverId);
             senderPersistentContext.addUiRow(uiRow);
-            ctx->uiRow = uiRow;
+            // ctx->uiRow = uiRow;
 
+            ctx->initializeUI("R");
             nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
             nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));
 
