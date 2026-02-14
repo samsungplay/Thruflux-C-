@@ -9,7 +9,7 @@
 #include "ReceiverSocketHandler.hpp"
 
 int main(const int argc, char **argv) {
-    spdlog::set_pattern("%v");
+    // spdlog::set_pattern("%v");
 
     receiver::ReceiverConfig::initialize(argc, argv);
 

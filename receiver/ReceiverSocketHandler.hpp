@@ -16,11 +16,11 @@ namespace receiver {
     class ReceiverSocketHandler {
     public:
         static void onConnect(ix::WebSocket &socket) {
-            // spdlog::info("Relay connected: {}", ReceiverConfig::serverUrl);
+            spdlog::info("Relay connected: {}", ReceiverConfig::serverUrl);
         }
 
         static void onClose(ix::WebSocket &socket, std::string_view reason) {
-            // spdlog::info("Relay disconnected: {} Reason={}", ReceiverConfig::serverUrl, reason);
+            spdlog::info("Relay disconnected: {} Reason={}", ReceiverConfig::serverUrl, reason);
             common::ThreadManager::terminate();
         }
 
