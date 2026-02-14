@@ -23,7 +23,8 @@ namespace sender {
                     for (const auto &context: connectionContexts_) {
                         if (!context || !context->started || context->complete) continue;
 
-                        auto &progressBar = senderPersistentContext.progressBars[static_cast<SenderConnectionContext *>(context)->progressBarIndex];
+                        auto &progressBar = senderPersistentContext.progressBars[static_cast<SenderConnectionContext *>(
+                            context)->progressBarIndex];
 
                         if (context->lastTime.time_since_epoch().count() == 0) {
                             context->lastTime = now;
@@ -166,8 +167,12 @@ namespace sender {
                         if (buf[0] == common::RECEIVER_MANIFEST_RECEIVED_ACK) {
                             //Time to blast data!
                             if (!connCtx->started) {
+                                connCtx->progressBar->set_option(
+                                  indicators::option::PostfixText{"starting..."});
+                                connCtx->progressBar->set_progress(0);
                                 connCtx->started = true;
                                 connCtx->startTime = std::chrono::high_resolution_clock::now();
+
                             }
 
 
