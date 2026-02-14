@@ -50,13 +50,23 @@ namespace common {
         }
 
 
-        static std::string sizeToReadableFormat(const double size) {
+        static std::string sizeToReadableFormat(double size) {
             if (size <= 0.0) return "0B";
-            if (size < 1024.0) return std::format("{:.0f}B", size);
-            int exp = static_cast<int>(std::log(size) / std::log(1024));
-            static const std::string units = "KMGTPE";
-            exp = std::min(exp, static_cast<int>(units.length()));
-            return std::format("{:.2f}{}B", size / std::pow(1024, exp), units[exp - 1]);
+
+            static constexpr const char *units[] = {
+                "B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"
+            };
+
+            int exp = 0;
+            while (size >= 1024.0 && exp < 6) {
+                size /= 1024.0;
+                ++exp;
+            }
+
+            if (exp == 0)
+                return std::format("{:.0f}{}", size, units[exp]);
+
+            return std::format("{:.2f}{}", size, units[exp]);
         }
 
         static std::optional<StunServer> toStunServer(const std::string_view raw) {
