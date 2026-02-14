@@ -143,7 +143,7 @@ namespace receiver {
                         row->progressBar.set_progress(100);
                         std::string postfix;
                         postfix.reserve(128);
-                        postfix += " sent";
+                        postfix += " received ";
                         postfix += common::Utils::sizeToReadableFormat(ctx->bytesMoved);
                         postfix += "  files ";
                         postfix += std::to_string(ctx->filesMoved);
@@ -152,8 +152,6 @@ namespace receiver {
 
                         row->progressBar.set_option(indicators::option::PostfixText{postfix});
                         std::cout << "\n" << std::flush;
-
-                        spdlog::info(postfix);
 
                         const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
                         spdlog::info("Transfer completed.");
