@@ -61,6 +61,17 @@ namespace sender {
             std::vector<std::string> absoluteFilePaths;
             std::uint64_t size = 0;
             int filesCount = 0;
+
+            indicators::ProgressBar scannerBar{
+                indicators::option::BarWidth{0},
+                indicators::option::Start{""},
+                indicators::option::End{""},
+                indicators::option::ShowPercentage{false},
+                indicators::option::PrefixText{"Scanning files... "},
+                indicators::option::PostfixText{"0 file(s), 0 B"},
+                indicators::option::ForegroundColor{indicators::Color::white}
+            };
+
             spdlog::info("Scanning files... {} file(s), {}", filesCount, common::Utils::sizeToReadableFormat(size));
 
             for (auto &path: paths) {
@@ -76,8 +87,8 @@ namespace sender {
                     u8 = root.generic_u8string();
                     absoluteFilePaths.push_back(std::string(u8.begin(), u8.end()));
 
-                    spdlog::info("Scanning files... {} file(s), {}", filesCount,
-                                 common::Utils::sizeToReadableFormat(size));
+                    std::string stats = std::to_string(filesCount) + " file(s), " + common::Utils::sizeToReadableFormat(size);
+                    scannerBar.set_option(indicators::option::PostfixText{stats});
                 } else {
                     for (const auto &entry: std::filesystem::recursive_directory_iterator(root)) {
                         if (entry.is_regular_file()) {
@@ -89,12 +100,14 @@ namespace sender {
                             filePaths.push_back(std::string(u8.begin(), u8.end()));
                             u8 = entry.path().generic_u8string();
                             absoluteFilePaths.push_back(std::string(u8.begin(), u8.end()));
-                            spdlog::info("Scanning files... {} file(s), {}", filesCount,
-                                         common::Utils::sizeToReadableFormat(size));
+                            std::string stats = std::to_string(filesCount) + " file(s), " + common::Utils::sizeToReadableFormat(size);
+                            scannerBar.set_option(indicators::option::PostfixText{stats});
                         }
                     }
                 }
             }
+
+            scannerBar.set_option(indicators::option::PostfixText{"Parsing files..."});
 
             totalExpectedBytes = size;
             totalExpectedFilesCount = filesCount;
@@ -123,6 +136,8 @@ namespace sender {
                 p += 2;
                 memcpy(p, f.relativePath.data(), nl);
             }
+
+            scannerBar.mark_as_completed();
         }
 
         std::shared_ptr<MmapEntry> getMmap(uint32_t id) {

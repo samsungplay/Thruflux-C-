@@ -176,7 +176,7 @@ namespace sender {
                             }
 
 
-                            // //save the manifest stream for reading future ack
+                            //save the manifest stream for reading future ack
                             connCtx->manifestStream = stream;
 
                             lsquic_stream_wantread(stream, 0);
@@ -334,9 +334,6 @@ namespace sender {
             api.ea_packets_out = sendPackets;
             api.ea_get_ssl_ctx = getSslCtx;
             engine_ = lsquic_engine_new(0, &api);
-
-            spdlog::info("LSQUIC Engine Successfully Initialized. {}", engine_ == nullptr);
-
             watchProgress();
         }
 

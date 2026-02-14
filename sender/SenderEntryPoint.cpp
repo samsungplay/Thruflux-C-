@@ -12,6 +12,8 @@
 
 int main(const int argc, char **argv) {
 
+    spdlog::set_pattern("[Thruflux] [%l] %v");
+
     sender::SenderConfig::initialize(argc, argv);
 
     std::vector<std::string> rawStunUrls;

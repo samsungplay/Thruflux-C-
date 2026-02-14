@@ -9,6 +9,8 @@
 #include "ReceiverSocketHandler.hpp"
 
 int main(const int argc, char **argv) {
+    spdlog::set_pattern("[Thruflux] [%l] %v");
+
     receiver::ReceiverConfig::initialize(argc, argv);
 
     common::IceHandler::initialize();
