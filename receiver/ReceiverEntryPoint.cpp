@@ -9,7 +9,7 @@
 #include "ReceiverSocketHandler.hpp"
 
 int main(const int argc, char **argv) {
-    spdlog::set_pattern("[Thruflux] [%l] %v");
+    spdlog::set_pattern("%v");
 
     receiver::ReceiverConfig::initialize(argc, argv);
 
@@ -58,7 +58,7 @@ int main(const int argc, char **argv) {
         }
     });
 
-    spdlog::info("Connecting to signaling server at {}...", receiver::ReceiverConfig::serverUrl);
+    spdlog::info("Connecting to relay... {}", receiver::ReceiverConfig::serverUrl);
 
     socketClient.start();
 

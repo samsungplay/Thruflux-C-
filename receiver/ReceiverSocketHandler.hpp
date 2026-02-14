@@ -16,11 +16,11 @@ namespace receiver {
     class ReceiverSocketHandler {
     public:
         static void onConnect(ix::WebSocket &socket) {
-            spdlog::info("Successfully connected to signaling server : {}", ReceiverConfig::serverUrl);
+            spdlog::info("Relay connected: {}", ReceiverConfig::serverUrl);
         }
 
         static void onClose(ix::WebSocket &socket, std::string_view reason) {
-            spdlog::info("Disconnected from signaling server : {} Reason: {}", ReceiverConfig::serverUrl, reason);
+            spdlog::info("Relay disconnected: {}", ReceiverConfig::serverUrl, reason);
             common::ThreadManager::terminate();
         }
 
@@ -41,16 +41,8 @@ namespace receiver {
                                 }
                             }
 
-                            spdlog::info("Gathering local ice candidates...");
-
                             common::IceHandler::gatherLocalCandidates(false, "", ReceiverConfig::totalConnections,
                                                                       [&socket](common::CandidatesResult result) {
-                                                                          spdlog::info(
-                                                                              "Successfully gathered local ice candidates. {} candidates found.",
-                                                                              result.serializedCandidates.size());
-
-                                                                          spdlog::info(
-                                                                              "Now sending local ice candidates to the sender...");
 
                                                                           socket.send(nlohmann::json(
                                                                               common::JoinTransferSessionPayload{
@@ -61,7 +53,7 @@ namespace receiver {
                         });
                 } else if (type == "accept_transfer_session_payload") {
                     const auto acceptedTransferSessionPayload = j.get<common::AcceptTransferSessionPayload>();
-                    spdlog::info("Join request accepted from sender. Establishing ICE connection...");
+                    spdlog::info("Access verified. Starting P2P negotiation...");
                     common::ThreadManager::postTask([payload = std::move(acceptedTransferSessionPayload), &socket]() {
                         common::IceHandler::establishConnection(
                             false, "",
@@ -70,20 +62,20 @@ namespace receiver {
                                       const int n) {
                                 if (success) {
                                     spdlog::info(
-                                        "ICE connection has been established!");
+                                        "P2P Route Established.");
                                     ReceiverStream::receiveTransfer(
                                         agent, streamId);
                                     socket.send(nlohmann::json(common::AcknowledgeTransferSessionPayload{
                                         .receiverId = "to_be_provided_by_server"
                                     }).dump());
                                 } else {
-                                    spdlog::error("Failed to establish ICE connection.");
+                                    spdlog::error("P2P Negotiation failed: Route unavailable.");
+                                    common::ThreadManager::terminate();
                                 }
                             });
                     });
                 }
             } catch (const std::exception &e) {
-                spdlog::error("Error occurred while handling socket message: {}", e.what());
                 socket.close();
             }
         }

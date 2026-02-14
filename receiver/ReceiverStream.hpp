@@ -32,6 +32,7 @@ namespace receiver {
                     receiverConnectionContext->progressBar->set_option(
                         indicators::option::PostfixText{"starting..."});
                     receiverConnectionContext->progressBar->set_progress(0);
+                    receiverConnectionContext->progressBar->print_progress();
                     return G_SOURCE_CONTINUE;
                 }
 
@@ -74,7 +75,8 @@ namespace receiver {
                 postfix += std::to_string(receiverConnectionContext->totalExpectedFilesCount);
                 receiverConnectionContext->progressBar->set_option(indicators::option::PostfixText{postfix});
                 receiverConnectionContext->progressBar->set_progress(p);
-
+                receiverConnectionContext->progressBar->print_progress();
+;
                 receiverConnectionContext->lastTime = now;
                 receiverConnectionContext->lastBytesMoved = receiverConnectionContext->bytesMoved;
 
@@ -128,12 +130,10 @@ namespace receiver {
             .on_new_conn = [](void *streamIfCtx, lsquic_conn_t *c) -> lsquic_conn_ctx * {
                 auto *ctx = static_cast<ReceiverConnectionContext *>(lsquic_conn_get_peer_ctx(c, nullptr));
                 ctx->connection = c;
-                spdlog::info("New QUIC connection formed");
                 return reinterpret_cast<lsquic_conn_ctx *>(ctx);
             },
             .on_conn_closed = [](lsquic_conn_t *c) {
                 auto *ctx = reinterpret_cast<ReceiverConnectionContext *>(lsquic_conn_get_ctx(c));
-                spdlog::warn("QUIC Connection closed");
                 lsquic_conn_set_ctx(c, nullptr);
                 if (ctx) {
                     if (ctx->complete) {
@@ -149,16 +149,16 @@ namespace receiver {
                         postfix += std::to_string(ctx->filesMoved);
                         postfix += "/";
                         postfix += std::to_string(ctx->totalExpectedFilesCount);
-
+                        postfix += " [DONE]";
                         progressBar->set_option(indicators::option::PostfixText{postfix});
                         progressBar->set_progress(100);
                         progressBar->mark_as_completed();
-                        std::cout << "\n" << std::flush;
-                        const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
-                        spdlog::info("Transfer completed.");
-                        spdlog::info("Time taken: {}s", diff.count());
                     } else {
-                        spdlog::error("Transfer failed.");
+                        const auto &progressBar = ctx->progressBar;
+                        progressBar->set_option(indicators::option::PostfixText(" [FAILED]"));
+                        progressBar->set_option(
+                            indicators::option::ForegroundColor{indicators::Color::red});
+                        progressBar->mark_as_completed();
                     }
                     ctx->connection = nullptr;
                 }
@@ -185,6 +185,7 @@ namespace receiver {
                             connCtx->progressBar->set_option(
                                 indicators::option::PostfixText{"starting..."});
                             connCtx->progressBar->set_progress(0);
+                            connCtx->progressBar->print_progress();
                             connCtx->started = true;
                         }
                     } else {

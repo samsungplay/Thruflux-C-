@@ -31,7 +31,9 @@ namespace sender {
                             context->lastBytesMoved = context->bytesMoved;
                             progressBar.set_option(
                                 indicators::option::PostfixText{"starting..."});
+
                             progressBar.set_progress(0);
+                            senderPersistentContext.progressBars.print_progress();
                             continue;
                         }
 
@@ -73,6 +75,7 @@ namespace sender {
 
                         progressBar.set_option(indicators::option::PostfixText{postfix});
                         progressBar.set_progress(p);
+                        senderPersistentContext.progressBars.print_progress();
 
                         context->lastTime = now;
                         context->lastBytesMoved = context->bytesMoved;
@@ -92,13 +95,11 @@ namespace sender {
                 ctx->connection = connection;
                 //open manifest stream
                 lsquic_conn_make_stream(connection);
-                spdlog::info("QUIC connection established");
                 return reinterpret_cast<lsquic_conn_ctx *>(ctx);
             },
 
             .on_conn_closed = [](lsquic_conn_t *connection) {
                 auto *ctx = reinterpret_cast<SenderConnectionContext *>(lsquic_conn_get_ctx(connection));
-                spdlog::info("QUIC Connection closed");;
                 lsquic_conn_set_ctx(connection, nullptr);
                 if (ctx) {
                     if (ctx->complete) {
@@ -113,16 +114,18 @@ namespace sender {
                         postfix += std::to_string(ctx->filesMoved);
                         postfix += "/";
                         postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);
+                        postfix += " [DONE]";
                         progressBar.set_option(indicators::option::PostfixText{postfix});
                         progressBar.set_progress(100);
                         senderPersistentContext.progressBars.print_progress();
                         progressBar.mark_as_completed();
-                        std::cout << "\n" << std::flush;
-                        const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
-                        spdlog::info("Transfer completed for receiver {}", ctx->receiverId);
-                        spdlog::info("Time taken: {}s", diff.count());
                     } else {
-                        spdlog::error("Transfer failed for receiver {}", ctx->receiverId);
+                        auto &progressBar = senderPersistentContext.progressBars[ctx->progressBarIndex];
+                        progressBar.set_option(
+                           indicators::option::ForegroundColor{indicators::Color::red});
+                        progressBar.set_option(indicators::option::PostfixText{" [FAILED]"});
+                        senderPersistentContext.progressBars.print_progress();
+                        progressBar.mark_as_completed();
                     }
                     std::erase(connectionContexts_, ctx);
                     ctx->connection = nullptr;
@@ -171,6 +174,7 @@ namespace sender {
                                 progressBar.set_option(
                                     indicators::option::PostfixText{"starting..."});
                                 progressBar.set_progress(0);
+                                senderPersistentContext.progressBars.print_progress();
                                 connCtx->started = true;
                                 connCtx->startTime = std::chrono::high_resolution_clock::now();
                             }
@@ -280,11 +284,6 @@ namespace sender {
             },
 
             .on_hsk_done = [](lsquic_conn_t *connection, enum lsquic_hsk_status status) {
-                if (status == LSQ_HSK_OK || status == LSQ_HSK_RESUMED_OK) {
-                    spdlog::info("QUIC Handshake Successful");
-                } else {
-                    spdlog::error("QUIC Handshake Failed");
-                }
             },
 
             .on_conncloseframe_received = [](lsquic_conn_t *c, int app_error, uint64_t error_code, const char *reason,
@@ -334,6 +333,7 @@ namespace sender {
             api.ea_packets_out = sendPackets;
             api.ea_get_ssl_ctx = getSslCtx;
             engine_ = lsquic_engine_new(0, &api);
+
             watchProgress();
         }
 

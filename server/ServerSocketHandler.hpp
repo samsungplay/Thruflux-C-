@@ -37,7 +37,10 @@ namespace server {
             spdlog::info("A {} with id {} has left. Reason: {}", session->getUserData()->role,
                          session->getUserData()->id.c_str(), message);
             if (role == "sender") {
-                TransferSessionStore::instance().removeTransferSession(id)->destroy();
+                const auto removed = TransferSessionStore::instance().removeTransferSession(id);
+                if (removed) {
+                    removed->destroy();
+                }
             } else {
                 if (const auto receiverTransferSession = TransferSessionStore::instance().
                             getTransferSessionByReceiverId(id);

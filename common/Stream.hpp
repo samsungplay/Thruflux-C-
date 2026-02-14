@@ -12,7 +12,7 @@
 #include <boost/asio/steady_timer.hpp>
 
 namespace common {
-    static int spdlog_log_buf(void *ctx, const char *buf, size_t len) {
+    static int spdlogLogBuf(void *ctx, const char *buf, size_t len) {
         std::string msg(buf, len);
 
         if (!msg.empty() && msg.back() == '\n') {
@@ -25,10 +25,10 @@ namespace common {
     }
 
     static const lsquic_logger_if spdlog_logger_if = {
-        .log_buf = spdlog_log_buf,
+        .log_buf = spdlogLogBuf,
     };
 
-    static void init_lsquic_logging() {
+    static void initLsquicDebugLogging() {
         lsquic_set_log_level("debug");
 
         lsquic_logger_init(&spdlog_logger_if, NULL, LLTS_NONE);
@@ -172,33 +172,33 @@ namespace common {
                 GError *error = nullptr;
 
                 if (!g_socket_set_option(gsock, SOL_SOCKET, SO_SNDBUF, bufSize, &error)) {
-                    spdlog::warn("Socket {} Failed to set SO_SNDBUF: {}", componentId, error->message);
+                    spdlog::warn("Socket {} Failed to set socket send buffer: {}", componentId, error->message);
                     g_clear_error(&error);
                 }
 
                 if (!g_socket_set_option(gsock, SOL_SOCKET, SO_RCVBUF, bufSize, &error)) {
-                    spdlog::warn("Socket {} Failed to set SO_RCVBUF: {}", componentId, error->message);
+                    spdlog::warn("Socket {} Failed to set socket receive buffer: {}", componentId, error->message);
                     g_clear_error(&error);
                 }
 
-                int actualSendBuf = 0;
-                int actualRecvBuf = 0;
-
-                if (g_socket_get_option(gsock, SOL_SOCKET, SO_SNDBUF, &actualSendBuf, &error)) {
-                    spdlog::info("Socket {} Actual OS Send Buffer: {}",
-                                 componentId, common::Utils::sizeToReadableFormat(actualSendBuf));
-                } else {
-                    spdlog::warn("Socket{} Failed to get SO_SNDBUF: {}", componentId, error->message);
-                    g_clear_error(&error);
-                }
-
-                if (g_socket_get_option(gsock, SOL_SOCKET, SO_RCVBUF, &actualRecvBuf, &error)) {
-                    spdlog::info("Socket{} Actual OS Receive Buffer: {}",
-                                 componentId, common::Utils::sizeToReadableFormat(actualRecvBuf));
-                } else {
-                    spdlog::warn("Socket{} Failed to get SO_RCVBUF: {}", componentId, error->message);
-                    g_clear_error(&error);
-                }
+                // int actualSendBuf = 0;
+                // int actualRecvBuf = 0;
+                //
+                // if (g_socket_get_option(gsock, SOL_SOCKET, SO_SNDBUF, &actualSendBuf, &error)) {
+                //     spdlog::info("Socket {} Actual OS Send Buffer: {}",
+                //                  componentId, common::Utils::sizeToReadableFormat(actualSendBuf));
+                // } else {
+                //     spdlog::warn("Socket{} Failed to get SO_SNDBUF: {}", componentId, error->message);
+                //     g_clear_error(&error);
+                // }
+                //
+                // if (g_socket_get_option(gsock, SOL_SOCKET, SO_RCVBUF, &actualRecvBuf, &error)) {
+                //     spdlog::info("Socket{} Actual OS Receive Buffer: {}",
+                //                  componentId, common::Utils::sizeToReadableFormat(actualRecvBuf));
+                // } else {
+                //     spdlog::warn("Socket{} Failed to get SO_RCVBUF: {}", componentId, error->message);
+                //     g_clear_error(&error);
+                // }
             }
         }
 

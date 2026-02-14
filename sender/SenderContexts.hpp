@@ -6,7 +6,6 @@
 #include "../common/Stream.hpp"
 
 namespace sender {
-
     struct MmapEntry {
         int fd = -1;
         uint8_t *ptr = nullptr;
@@ -51,23 +50,22 @@ namespace sender {
         std::unordered_map<uint32_t, std::shared_ptr<MmapEntry> > mmaps;
         std::list<uint32_t> lruList;
         const size_t MAX_MMAPS = 16;
-        int globalCnt =0;
-        std::list<std::unique_ptr<indicators::ProgressBar>> progressBarsStorage;
+        std::list<std::unique_ptr<indicators::ProgressBar> > progressBarsStorage;
         indicators::DynamicProgress<indicators::ProgressBar> progressBars;
 
-        void buildManifest(const std::vector<std::string>& paths) {
+        void buildManifest(const std::vector<std::string> &paths) {
+            files.clear();
 
-            std::vector<std::string> filePaths;
-            std::vector<std::string> absoluteFilePaths;
-            std::uint64_t size = 0;
+            std::uint64_t totalSize = 0;
             int filesCount = 0;
+            uint32_t filesIndex = 0;
 
             indicators::ProgressBar scannerBar{
                 indicators::option::BarWidth{0},
                 indicators::option::Start{""},
                 indicators::option::End{""},
                 indicators::option::ShowPercentage{false},
-                indicators::option::PrefixText{"Scanning files... "},
+                indicators::option::PrefixText{"Cataloging... "},
                 indicators::option::PostfixText{"0 file(s), 0 B"},
                 indicators::option::ForegroundColor{indicators::Color::white}
             };
@@ -78,54 +76,79 @@ namespace sender {
                     continue;
                 }
                 if (std::filesystem::is_regular_file(root)) {
-                    size += std::filesystem::file_size(root);
+                    auto size = std::filesystem::file_size(root);
+                    totalSize += size;
                     filesCount++;
                     auto u8 = root.filename().generic_u8string();
-                    filePaths.push_back(std::string(u8.begin(), u8.end()));
+                    const auto relativePath = std::string(u8.begin(), u8.end());
                     u8 = root.generic_u8string();
-                    absoluteFilePaths.push_back(std::string(u8.begin(), u8.end()));
+                    const auto absolutePath = std::string(u8.begin(), u8.end());
+                    files.push_back({
+                        filesIndex,
+                        size,
+                        absolutePath,
+                        relativePath
+                    });
+                    filesIndex++;
 
-                    std::string stats = std::to_string(filesCount) + " file(s), " + common::Utils::sizeToReadableFormat(size);
-                    scannerBar.set_option(indicators::option::PostfixText{stats});
+                    if (filesCount % 1000 == 0) {
+                        std::string stats = std::to_string(filesCount) + " file(s), " +
+                                            common::Utils::sizeToReadableFormat(totalSize);
+                        scannerBar.set_option(indicators::option::PostfixText{stats});
+                        scannerBar.print_progress();
+                    }
                 } else {
                     for (const auto &entry: std::filesystem::recursive_directory_iterator(root)) {
                         if (entry.is_regular_file()) {
-                            size += std::filesystem::file_size(entry.path());
+                            auto size = entry.file_size();
+                            totalSize += size;
                             filesCount++;
 
-                            auto relativePath = entry.path().lexically_relative(root.parent_path());
-                            auto u8 = relativePath.generic_u8string();
-                            filePaths.push_back(std::string(u8.begin(), u8.end()));
+                            auto relative = entry.path().lexically_relative(root.parent_path());
+                            auto u8 = relative.generic_u8string();
+                            auto relativePath = std::string(u8.begin(), u8.end());
                             u8 = entry.path().generic_u8string();
-                            absoluteFilePaths.push_back(std::string(u8.begin(), u8.end()));
-                            std::string stats = std::to_string(filesCount) + " file(s), " + common::Utils::sizeToReadableFormat(size);
-                            scannerBar.set_option(indicators::option::PostfixText{stats});
+                            auto absolutePath = std::string(u8.begin(), u8.end());
+                            files.push_back({
+                                filesIndex,
+                                size,
+                                absolutePath,
+                                relativePath
+                            });
+                            filesIndex++;
+                            if (filesCount % 1000 == 0) {
+                                std::string stats =
+                                        std::to_string(filesCount) + " file(s), " + common::Utils::sizeToReadableFormat(
+                                            totalSize);
+                                scannerBar.set_option(indicators::option::PostfixText{stats});
+                                scannerBar.print_progress();
+                            }
                         }
                     }
                 }
             }
 
-            scannerBar.set_option(indicators::option::PostfixText{"Parsing files...           "});
+            std::string stats = std::to_string(filesCount) + " file(s), " + common::Utils::sizeToReadableFormat(
+                                    totalSize);
+            scannerBar.set_option(indicators::option::PrefixText{"Encoding Manifest... "});
+            scannerBar.set_option(indicators::option::PostfixText{stats});
+            scannerBar.print_progress();
 
-            totalExpectedBytes = size;
+
+            totalExpectedBytes = totalSize;
             totalExpectedFilesCount = filesCount;
 
-            files.clear();
-            for (int i = 0; i < absoluteFilePaths.size(); i++) {
-                std::uint64_t size = std::filesystem::file_size(absoluteFilePaths[i]);
-                files.push_back({
-                    static_cast<uint32_t>(i), size,
-                    absoluteFilePaths[i], filePaths[i]
-                });
-            }
-            const uint32_t count = files.size();
-            manifestBlob.resize(4);
-            memcpy(manifestBlob.data(), &count, 4);
+            size_t estimatedSize = 4;
+            for(const auto& f : files) estimatedSize += (14 + f.relativePath.size());
+            manifestBlob.clear();
+            manifestBlob.resize(estimatedSize);
+            uint8_t* p = manifestBlob.data();
+            const uint32_t count = static_cast<uint32_t>(files.size());
+            memcpy(p, &count, 4);
+            p += 4;
+
             for (const auto &f: files) {
-                size_t old = manifestBlob.size();
-                uint16_t nl = f.relativePath.size();
-                manifestBlob.resize(old + 14 + nl);
-                uint8_t *p = manifestBlob.data() + old;
+                uint16_t nl = static_cast<uint16_t>(f.relativePath.size());
                 memcpy(p, &f.id, 4);
                 p += 4;
                 memcpy(p, &f.size, 8);
@@ -133,8 +156,10 @@ namespace sender {
                 memcpy(p, &nl, 2);
                 p += 2;
                 memcpy(p, f.relativePath.data(), nl);
+                p += nl;
             }
 
+            scannerBar.set_option(indicators::option::PrefixText{"Manifest Sealed. "});
             scannerBar.mark_as_completed();
         }
 
@@ -169,7 +194,7 @@ namespace sender {
     inline SenderPersistentContext senderPersistentContext;
 
 
-     //1 connection = 1 transfer = 1 receiver
+    //1 connection = 1 transfer = 1 receiver
     struct SenderConnectionContext : common::ConnectionContext {
         std::string receiverId;
         bool manifestStreamCreated = false;
@@ -181,7 +206,7 @@ namespace sender {
     };
 
     struct SenderStreamContext {
-        SenderConnectionContext* connectionContext = nullptr;
+        SenderConnectionContext *connectionContext = nullptr;
         bool typeByteSent = false;
         bool isManifestStream = false;
         std::shared_ptr<MmapEntry> currentMmap;
@@ -195,7 +220,6 @@ namespace sender {
         int id = 0;
 
         bool loadNextChunk() {
-
             while (true) {
                 if (connectionContext->currentFileIndex >= senderPersistentContext.files.size()) {
                     return false;

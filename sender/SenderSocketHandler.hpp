@@ -15,11 +15,11 @@ namespace sender {
     class SenderSocketHandler {
     public:
         static void onConnect(ix::WebSocket &socket) {
-            spdlog::info("Successfully connected to signaling server : {}", SenderConfig::serverUrl);
+            spdlog::info("Relay connected: {}", SenderConfig::serverUrl);
         }
 
         static void onClose(ix::WebSocket &socket, std::string_view reason) {
-            spdlog::info("Disconnected from signaling server : {} Reason: {}", SenderConfig::serverUrl, reason);
+            spdlog::info("Relay disconnected: {} ", SenderConfig::serverUrl, reason);
             common::ThreadManager::terminate();
         }
 
@@ -54,15 +54,13 @@ namespace sender {
                         });
                 } else if (type == "created_transfer_session_payload") {
                     const auto createdTransferPayload = j.get<common::CreatedTransferSessionPayload>();
-                    spdlog::info("Session created with join code: {}", createdTransferPayload.joinCode);
+                    spdlog::info("Secure Code Generated : \033[1;36m{}\033[0m", createdTransferPayload.joinCode);
+                    spdlog::info("Run on receiver : /thru join {}", createdTransferPayload.joinCode);
                     common::ThreadManager::postTask([createdTransferPayload = std::move(createdTransferPayload)]() {
                         senderPersistentContext.joinCode = createdTransferPayload.joinCode;
                     });
                 } else if (type == "join_transfer_session_payload") {
                     const auto joinTransferSessionPayload = j.get<common::JoinTransferSessionPayload>();
-                    spdlog::info("Incoming join request from {}, gathering local candidates...",
-                                 joinTransferSessionPayload.receiverId);
-
                     common::ThreadManager::postTask(
                         [&socket,joinTransferSessionPayload = std::move(joinTransferSessionPayload)]() {
                             auto &receiverId = joinTransferSessionPayload.receiverId;
@@ -71,13 +69,6 @@ namespace sender {
                                                                           payload = std::move(
                                                                               joinTransferSessionPayload)](
                                                                   common::CandidatesResult result) {
-                                                                          spdlog::info(
-                                                                              "Successfully gathered local ice candidates. {} candidates found.",
-                                                                              result.serializedCandidates.size());
-
-                                                                          spdlog::info("Accepted join request from {}.",
-                                                                              receiverId);
-
 
                                                                           common::IceHandler::establishConnection(
                                                                               true,
@@ -89,8 +80,6 @@ namespace sender {
                                                                           guint streamId,
                                                                           const int n) {
                                                                                   if (success) {
-                                                                                      spdlog::info(
-                                                                                          "ICE connection has been established!");
                                                                                       socket.send(nlohmann::json(
                                                                                           common::AcceptTransferSessionPayload
                                                                                           {
@@ -98,9 +87,6 @@ namespace sender {
                                                                                               std::move(result),
                                                                                               .receiverId = receiverId,
                                                                                           }).dump());
-                                                                                  } else {
-                                                                                      spdlog::error(
-                                                                                          "Failed to establish ICE connection.");
                                                                                   }
                                                                               });
                                                                       });
@@ -110,14 +96,12 @@ namespace sender {
                     common::ThreadManager::postTask(
                         [quitTransferSessionPayload = std::move(quitTransferSessionPayload)]() {
                             auto &receiverId = quitTransferSessionPayload.receiverId;
-                            spdlog::info("A receiver with id {} has left.", receiverId);
                             SenderStream::disposeReceiverConnection(receiverId);
                             common::IceHandler::dispose(receiverId);
                         });
                 } else if (type == "acknowledge_transfer_session_payload") {
                     const auto acknowledgeTransferSessionPayload = j.get<common::AcknowledgeTransferSessionPayload>();
-                    spdlog::info("Transfer session acknowledged from receiver {}. Finally starting QUIC handshake..",
-                                 acknowledgeTransferSessionPayload.receiverId);
+
                     common::ThreadManager::postTask(
                         [acknowledgeTransferSessionPayload = std::move(acknowledgeTransferSessionPayload)]() {
                             const auto &iceContext = common::IceHandler::getAgentsMap()[
@@ -128,7 +112,6 @@ namespace sender {
                         });
                 }
             } catch (const std::exception &e) {
-                spdlog::error("Error occurred while handling socket message: {}", e.what());
                 socket.close();
             }
         }

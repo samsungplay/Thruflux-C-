@@ -12,7 +12,7 @@
 
 int main(const int argc, char **argv) {
 
-    spdlog::set_pattern("[Thruflux] [%l] %v");
+    spdlog::set_pattern("%v");
 
     sender::SenderConfig::initialize(argc, argv);
 
@@ -60,7 +60,7 @@ int main(const int argc, char **argv) {
         }
     });
 
-    spdlog::info("Connecting to signaling server at {}...", sender::SenderConfig::serverUrl);
+    spdlog::info("Connecting to relay... ", sender::SenderConfig::serverUrl);
 
     socketClient.start();
 

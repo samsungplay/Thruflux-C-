@@ -228,7 +228,6 @@ namespace common {
             }
 
             int n = componentListsMap.size();
-            spdlog::info(n);
 
             for (auto &[componentId, list]: componentListsMap) {
                 nice_agent_set_remote_candidates(agent, streamId, componentId, list);
