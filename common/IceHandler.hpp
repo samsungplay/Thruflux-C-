@@ -228,33 +228,32 @@ namespace common {
             }
 
             int n = componentListsMap.size();
+            spdlog::info(n);
 
             for (auto &[componentId, list]: componentListsMap) {
                 nice_agent_set_remote_candidates(agent, streamId, componentId, list);
                 g_slist_free_full(list, reinterpret_cast<GDestroyNotify>(nice_candidate_free));
             }
 
+            spdlog::info("2");
+
 
             auto streamState = std::make_shared<IceStreamState>(n,
                                                                 std::move(callback));
+            spdlog::info("3");
 
             auto componentStateChangedCallback = [streamState = std::move(streamState), agent,n
                     ](guint stream_id, guint state) {
                 spdlog::info("ok0");
                 if (streamState->alreadyFired) return;
 
-                spdlog::info("ok1");
                 if (state == NICE_COMPONENT_STATE_READY) {
-                    spdlog::info("ok2");
                     streamState->readyComponents++;
-                    spdlog::info("ok..");
                     if (streamState->readyComponents == streamState->totalComponents) {
-                        spdlog::info("oh");
                         streamState->alreadyFired = true;
                         streamState->callback(agent, true, stream_id, n);
                     }
                 } else if (state == NICE_COMPONENT_STATE_FAILED) {
-                    spdlog::info("oog");
                     streamState->alreadyFired = true;
                     streamState->callback(nullptr, false, stream_id, n);
                 }
@@ -262,6 +261,8 @@ namespace common {
 
             auto componentStateChangedCallbackPtr = new decltype(componentStateChangedCallback)(
                 std::move(componentStateChangedCallback));
+
+            spdlog::info("4");
 
             g_signal_connect_data(agent, "component-state-changed",
                                   G_CALLBACK(
@@ -280,10 +281,14 @@ namespace common {
                                   static_cast<GConnectFlags>(0)
             );
 
+            spdlog::info("5");
+
 
             if (!nice_agent_gather_candidates(agent, streamId)) {
                 callback(nullptr, false, streamId, -1);
             }
+
+            spdlog::info("6");
         }
     };
 }
