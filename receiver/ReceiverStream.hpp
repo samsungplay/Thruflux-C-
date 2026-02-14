@@ -266,7 +266,7 @@ namespace receiver {
                             ctx->headerBytesRead = 0;
                         }
 
-                        if (connCtx->bytesMoved >= connCtx->totalExpectedBytes) {
+                        if (connCtx->filesMoved == connCtx->totalExpectedFilesCount) {
                             //transfer complete. needs to send ACK to sender..
                             connCtx->complete = true;
                             connCtx->pendingCompleteAck = true;
