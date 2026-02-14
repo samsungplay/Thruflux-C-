@@ -69,12 +69,12 @@ namespace receiver {
                 std::string postfix;
                 postfix.reserve(256);
                 postfix += common::Utils::sizeToReadableFormat(ewmaThroughput);
-                postfix += "/s  received ";
+                postfix += "/s received ";
                 postfix += common::Utils::sizeToReadableFormat(receiverConnectionContext->bytesMoved);
                 postfix += " resumed ";
                 postfix += common::Utils::sizeToReadableFormat(receiverConnectionContext->skippedBytes);
 
-                postfix += "  files ";
+                postfix += " files ";
 
                 postfix += std::to_string(receiverConnectionContext->filesMoved);
                 postfix += "/";
@@ -154,7 +154,7 @@ namespace receiver {
                         postfix += common::Utils::sizeToReadableFormat(ctx->bytesMoved);
                         postfix += " resumed ";
                         postfix += common::Utils::sizeToReadableFormat(ctx->skippedBytes);
-                        postfix += "  files ";
+                        postfix += " files ";
                         postfix += std::to_string(ctx->filesMoved);
                         postfix += "/";
                         postfix += std::to_string(ctx->totalExpectedFilesCount);
@@ -172,7 +172,7 @@ namespace receiver {
                         postfix += common::Utils::sizeToReadableFormat(ctx->bytesMoved);
                         postfix += " resumed ";
                         postfix += common::Utils::sizeToReadableFormat(ctx->skippedBytes);
-                        postfix += "  files ";
+                        postfix += " files ";
                         postfix += std::to_string(ctx->filesMoved);
                         postfix += "/";
                         postfix += std::to_string(ctx->totalExpectedFilesCount);

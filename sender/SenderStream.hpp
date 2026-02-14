@@ -67,11 +67,11 @@ namespace sender {
                         std::string postfix;
                         postfix.reserve(256);
                         postfix += common::Utils::sizeToReadableFormat(ewmaThroughput);
-                        postfix += "/s  sent ";
+                        postfix += "/s sent ";
                         postfix += common::Utils::sizeToReadableFormat(context->bytesMoved);
                         postfix += " resumed ";
                         postfix += common::Utils::sizeToReadableFormat(context->skippedBytes);
-                        postfix += "  files ";
+                        postfix += " files ";
                         postfix += std::to_string(context->filesMoved);
                         postfix += "/";
                         postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);
@@ -116,7 +116,7 @@ namespace sender {
                         postfix += common::Utils::sizeToReadableFormat(ctx->bytesMoved);
                         postfix += " resumed ";
                         postfix += common::Utils::sizeToReadableFormat(ctx->skippedBytes);
-                        postfix += "  files ";
+                        postfix += " files ";
                         postfix += std::to_string(ctx->filesMoved);
                         postfix += "/";
                         postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);
@@ -137,7 +137,7 @@ namespace sender {
                         postfix += common::Utils::sizeToReadableFormat(ctx->bytesMoved);
                         postfix += " resumed ";
                         postfix += common::Utils::sizeToReadableFormat(ctx->skippedBytes);
-                        postfix += "  files ";
+                        postfix += " files ";
                         postfix += std::to_string(ctx->filesMoved);
                         postfix += "/";
                         postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);

@@ -51,7 +51,7 @@ namespace common {
 
 
         static std::string sizeToReadableFormat(const double size) {
-            if (size <= 0.0) return "0 B";
+            if (size <= 0.0) return "0B";
             if (size < 1024.0) return std::format("{:.0f} B", size);
             int exp = static_cast<int>(std::log(size) / std::log(1024));
             static const std::string units = "KMGTPE";
