@@ -71,7 +71,7 @@ namespace common {
     struct UiRow {
         indicators::ProgressBar progressBar;
 
-        explicit UiRow(std::string prefix) : progressBar(
+       explicit UiRow(std::string prefix) : progressBar(
             indicators::option::BarWidth(32),
             indicators::option::Start("["),
             indicators::option::Fill("■"),
@@ -104,10 +104,10 @@ namespace common {
         bool started = false;
         bool complete = false;
         lsquic_stream_t *manifestStream = nullptr;
-        std::unique_ptr<UiRow> uiRow = nullptr;
+        std::shared_ptr<UiRow> uiRow = nullptr;
 
         void initializeUI(std::string prefix) {
-            uiRow = std::make_unique<UiRow>(prefix);
+            uiRow = std::make_shared<UiRow>(prefix);
         }
     };
 }

@@ -1,4 +1,5 @@
 #pragma once
+#include <indicators/dynamic_progress.hpp>
 #include <sys/mman.h>
 
 #include "../common/Contexts.hpp"
@@ -51,6 +52,8 @@ namespace sender {
         std::list<uint32_t> lruList;
         const size_t MAX_MMAPS = 16;
         int globalCnt =0;
+        std::vector<std::shared_ptr<common::UiRow>> uiRows;
+        indicators::DynamicProgress<indicators::ProgressBar> progressBars;
 
         void buildManifest(const std::vector<std::string>& paths) {
 
@@ -143,6 +146,10 @@ namespace sender {
             return nullptr;
         }
 
+        void addUiRow(const std::shared_ptr<common::UiRow> uiRow) {
+            uiRows.push_back(std::move(uiRow));
+            progressBars.push_back(uiRow->progressBar);
+        }
     };
 
     inline SenderPersistentContext senderPersistentContext;

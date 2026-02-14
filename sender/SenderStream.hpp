@@ -350,7 +350,9 @@ namespace sender {
             ctx->agent = agent;
             ctx->streamId = streamId;
             ctx->receiverId = receiverId;
-            ctx->initializeUI("Receiver ID " + ctx->receiverId + ": ");
+            const auto uiRow = std::make_shared<common::UiRow>("Receiver ID: " + ctx->receiverId);
+            senderPersistentContext.addUiRow(uiRow);
+            ctx->uiRow = uiRow;
 
             nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
             nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));
