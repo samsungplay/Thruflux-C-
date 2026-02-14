@@ -153,7 +153,7 @@ namespace receiver {
                         progressBar->set_option(indicators::option::PostfixText{postfix});
                         progressBar->set_progress(100);
                         progressBar->mark_as_completed();
-                        // std::cout << "\n" << std::flush;
+                        std::cout << "\n" << std::flush;
 
                         const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
                         spdlog::info("Transfer completed.");
