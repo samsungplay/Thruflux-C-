@@ -32,14 +32,14 @@ namespace receiver {
                     const auto turnCredentialsPayload = j.get<common::TurnCredentialsPayload>();
                     common::ThreadManager::postTask(
                         [turnCredentialsPayload = std::move(turnCredentialsPayload), &socket]() {
-                            if (turnCredentialsPayload.username != "none" || turnCredentialsPayload.password !=
-                                "none") {
-                                if (auto turnServer = common::Utils::toTurnServer(
-                                    turnCredentialsPayload.turnUrl, turnCredentialsPayload.username,
-                                    turnCredentialsPayload.password); turnServer.has_value()) {
-                                    common::IceHandler::addTurnServer(turnServer.value());
-                                }
-                            }
+                            // if (turnCredentialsPayload.username != "none" || turnCredentialsPayload.password !=
+                            //     "none") {
+                            //     if (auto turnServer = common::Utils::toTurnServer(
+                            //         turnCredentialsPayload.turnUrl, turnCredentialsPayload.username,
+                            //         turnCredentialsPayload.password); turnServer.has_value()) {
+                            //         common::IceHandler::addTurnServer(turnServer.value());
+                            //     }
+                            // }
 
 
                             // common::IceHandler::gatherLocalCandidates(false, "", ReceiverConfig::totalConnections,
