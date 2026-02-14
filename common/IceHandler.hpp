@@ -229,8 +229,6 @@ namespace common {
 
             int n = componentListsMap.size();
 
-            spdlog::info(n);
-
             for (auto &[componentId, list]: componentListsMap) {
                 nice_agent_set_remote_candidates(agent, streamId, componentId, list);
                 g_slist_free_full(list, reinterpret_cast<GDestroyNotify>(nice_candidate_free));
@@ -242,7 +240,9 @@ namespace common {
 
             auto componentStateChangedCallback = [streamState = std::move(streamState), agent,n
                     ](guint stream_id, guint state) {
+                spdlog::info("?");
                 if (streamState->alreadyFired) return;
+                spdlog::info("?2");
 
                 if (state == NICE_COMPONENT_STATE_READY) {
                     streamState->readyComponents++;
@@ -275,6 +275,8 @@ namespace common {
                                   },
                                   static_cast<GConnectFlags>(0)
             );
+
+            spdlog::info("3");
 
             if (!nice_agent_gather_candidates(agent, streamId)) {
                 callback(nullptr, false, streamId, -1);
