@@ -140,7 +140,7 @@ namespace receiver {
                         const auto &row = ctx->uiRow;
                         row->progressBar.set_option(
                             indicators::option::ForegroundColor{indicators::Color::green});
-                        row->progressBar.set_progress(100);
+
                         std::string postfix;
                         postfix.reserve(128);
                         postfix += " received ";
@@ -151,6 +151,7 @@ namespace receiver {
                         postfix += std::to_string(ctx->totalExpectedFilesCount);
 
                         row->progressBar.set_option(indicators::option::PostfixText{postfix});
+                        row->progressBar.set_progress(100);
                         std::cout << "\n" << std::flush;
 
                         const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
