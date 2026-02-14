@@ -60,6 +60,7 @@ namespace receiver {
                             payload.candidatesResult,
                             [&socket](NiceAgent *agent, const bool success, const guint streamId,
                                       const int n) {
+                                spdlog::info("??");
                                 if (success) {
                                     spdlog::info(
                                         "P2P Route Established.");
