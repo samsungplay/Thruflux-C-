@@ -183,6 +183,9 @@ namespace receiver {
                         if (ctx->type == ReceiverStreamContext::DATA && !connCtx->started) {
                             connCtx->started = true;
                             connCtx->startTime = std::chrono::high_resolution_clock::now();
+                            connCtx->progressBar->set_option(
+                  indicators::option::PostfixText{"starting..."});
+                            connCtx->progressBar->set_progress(0);
                         }
                     } else {
                         return;
@@ -376,9 +379,7 @@ namespace receiver {
             ctx->agent = agent;
             ctx->streamId = streamId;
             ctx->createProgressBar("Receiving ");
-            ctx->progressBar->set_option(
-                     indicators::option::PostfixText{"starting..."});
-            ctx->progressBar->set_progress(0);
+
 
 
             nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
