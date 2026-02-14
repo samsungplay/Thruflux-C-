@@ -114,13 +114,11 @@ namespace sender {
                         postfix += " [DONE]";
                         progressBar.set_option(indicators::option::PostfixText{postfix});
                         progressBar.set_progress(100);
-                        progressBar.mark_as_completed();
                     } else {
                         auto &progressBar = senderPersistentContext.progressBars[ctx->progressBarIndex];
                         progressBar.set_option(
                            indicators::option::ForegroundColor{indicators::Color::red});
                         progressBar.set_option(indicators::option::PostfixText{" [FAILED]"});
-                        progressBar.mark_as_completed();
                     }
                     std::erase(connectionContexts_, ctx);
                     ctx->connection = nullptr;

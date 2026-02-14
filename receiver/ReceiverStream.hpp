@@ -153,13 +153,11 @@ namespace receiver {
                         postfix += " [DONE]";
                         progressBar->set_option(indicators::option::PostfixText{postfix});
                         progressBar->set_progress(100);
-                        progressBar->mark_as_completed();
                     } else {
                         const auto &progressBar = ctx->progressBar;
                         progressBar->set_option(indicators::option::PostfixText(" [FAILED]"));
                         progressBar->set_option(
                             indicators::option::ForegroundColor{indicators::Color::red});
-                        progressBar->mark_as_completed();
                     }
                     ctx->connection = nullptr;
                 }
