@@ -31,9 +31,7 @@ namespace sender {
                             context->lastBytesMoved = context->bytesMoved;
                             progressBar.set_option(
                                 indicators::option::PostfixText{"starting..."});
-
                             progressBar.set_progress(0);
-                            senderPersistentContext.progressBars.print_progress();
                             continue;
                         }
 
@@ -75,7 +73,6 @@ namespace sender {
 
                         progressBar.set_option(indicators::option::PostfixText{postfix});
                         progressBar.set_progress(p);
-                        senderPersistentContext.progressBars.print_progress();
 
                         context->lastTime = now;
                         context->lastBytesMoved = context->bytesMoved;
@@ -117,14 +114,12 @@ namespace sender {
                         postfix += " [DONE]";
                         progressBar.set_option(indicators::option::PostfixText{postfix});
                         progressBar.set_progress(100);
-                        senderPersistentContext.progressBars.print_progress();
                         progressBar.mark_as_completed();
                     } else {
                         auto &progressBar = senderPersistentContext.progressBars[ctx->progressBarIndex];
                         progressBar.set_option(
                            indicators::option::ForegroundColor{indicators::Color::red});
                         progressBar.set_option(indicators::option::PostfixText{" [FAILED]"});
-                        senderPersistentContext.progressBars.print_progress();
                         progressBar.mark_as_completed();
                     }
                     std::erase(connectionContexts_, ctx);
@@ -174,7 +169,6 @@ namespace sender {
                                 progressBar.set_option(
                                     indicators::option::PostfixText{"starting..."});
                                 progressBar.set_progress(0);
-                                senderPersistentContext.progressBars.print_progress();
                                 connCtx->started = true;
                                 connCtx->startTime = std::chrono::high_resolution_clock::now();
                             }

@@ -35,7 +35,6 @@ namespace receiver {
                     receiverConnectionContext->progressBar->set_option(
                         indicators::option::PostfixText{"starting..."});
                     receiverConnectionContext->progressBar->set_progress(0);
-                    receiverConnectionContext->progressBar->print_progress();
                     return G_SOURCE_CONTINUE;
                 }
 
@@ -78,7 +77,6 @@ namespace receiver {
                 postfix += std::to_string(receiverConnectionContext->totalExpectedFilesCount);
                 receiverConnectionContext->progressBar->set_option(indicators::option::PostfixText{postfix});
                 receiverConnectionContext->progressBar->set_progress(p);
-                receiverConnectionContext->progressBar->print_progress();
 ;
                 receiverConnectionContext->lastTime = now;
                 receiverConnectionContext->lastBytesMoved = receiverConnectionContext->bytesMoved;
@@ -188,7 +186,6 @@ namespace receiver {
                             connCtx->progressBar->set_option(
                                 indicators::option::PostfixText{"starting..."});
                             connCtx->progressBar->set_progress(0);
-                            connCtx->progressBar->print_progress();
                             connCtx->started = true;
                         }
                     } else {
