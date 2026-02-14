@@ -60,7 +60,6 @@ namespace sender {
 
             std::uint64_t totalSize = 0;
             int filesCount = 0;
-            uint32_t filesIndex = 0;
 
             indicators::ProgressBar scannerBar{
                 indicators::option::BarWidth{0},
@@ -86,12 +85,11 @@ namespace sender {
                     u8 = root.generic_u8string();
                     const auto absolutePath = std::string(u8.begin(), u8.end());
                     files.push_back({
-                        filesIndex,
+                        0,
                         size,
                         absolutePath,
                         relativePath
                     });
-                    filesIndex++;
 
                     if (filesCount % 1000 == 0) {
                         std::string stats = std::to_string(filesCount) + " file(s), " +
@@ -112,12 +110,11 @@ namespace sender {
                             u8 = entry.path().generic_u8string();
                             auto absolutePath = std::string(u8.begin(), u8.end());
                             files.push_back({
-                                filesIndex,
+                                0,
                                 size,
                                 absolutePath,
                                 relativePath
                             });
-                            filesIndex++;
                             if (filesCount % 1000 == 0) {
                                 std::string stats =
                                         std::to_string(filesCount) + " file(s), " + common::Utils::sizeToReadableFormat(
@@ -128,6 +125,15 @@ namespace sender {
                         }
                     }
                 }
+            }
+
+            //sort for stable file ids (for resuming)
+            std::sort(files.begin(), files.end(),
+                      [](const FileInfo &a, const FileInfo &b) {
+                          return a.relativePath < b.relativePath;
+                      });
+            for (uint32_t i = 0; i < files.size(); ++i) {
+                files[i].id = i;
             }
 
             std::string stats = std::to_string(filesCount) + " file(s), " + common::Utils::sizeToReadableFormat(
@@ -216,7 +222,6 @@ namespace sender {
         std::vector<uint8_t> resumeBitmap;
         uint64_t logicalBytesMoved = 0;
         uint64_t lastLogicalBytesMoved = 0;
-
     };
 
     struct SenderStreamContext {
