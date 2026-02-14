@@ -62,6 +62,7 @@ int main(const int argc, char **argv) {
 
     socketClient.start();
 
+
     common::ThreadManager::runMainLoop();
 
     socketClient.stop();
