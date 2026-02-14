@@ -72,8 +72,6 @@ namespace sender {
                 indicators::option::ForegroundColor{indicators::Color::white}
             };
 
-            spdlog::info("Scanning files... {} file(s), {}", filesCount, common::Utils::sizeToReadableFormat(size));
-
             for (auto &path: paths) {
                 std::filesystem::path root(path);
                 if (!std::filesystem::exists(root)) {
