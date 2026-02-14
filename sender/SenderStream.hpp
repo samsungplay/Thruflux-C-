@@ -118,8 +118,8 @@ namespace sender {
                         progressBar.mark_as_completed();
                         std::cout << std::endl;
                         const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
-                        spdlog::info("Transfer completed for receiver {}", ctx->receiverId);
-                        spdlog::info("Time taken: {}s", diff.count());
+                        // spdlog::info("Transfer completed for receiver {}", ctx->receiverId);
+                        // spdlog::info("Time taken: {}s", diff.count());
                     } else {
                         spdlog::error("Transfer failed for receiver {}", ctx->receiverId);
                     }
