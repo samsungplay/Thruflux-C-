@@ -242,7 +242,9 @@ namespace common {
                     ](guint stream_id, guint state) {
                 if (streamState->alreadyFired) return;
 
+                spdlog::info("ok1");
                 if (state == NICE_COMPONENT_STATE_READY) {
+                    spdlog::info("ok2");
                     streamState->readyComponents++;
                     spdlog::info("ok..");
                     if (streamState->readyComponents == streamState->totalComponents) {
