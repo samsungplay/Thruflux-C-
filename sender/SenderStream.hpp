@@ -241,7 +241,6 @@ namespace sender {
                 }
             },
             .on_write = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
-                spdlog::info("ON_WRITE INVOKED");
                 auto *ctx = reinterpret_cast<SenderStreamContext *>(h);
                 auto *connCtx = reinterpret_cast<SenderConnectionContext *>(lsquic_conn_get_ctx(
                     lsquic_stream_conn(stream)));
@@ -260,7 +259,6 @@ namespace sender {
                 if (ctx->isManifestStream) {
 
                     size_t total = senderPersistentContext.manifestBlob.size();
-                    spdlog::info("sending manifest: {}/{}", connCtx->manifestSent, total);
                     size_t sent = connCtx->manifestSent;
                     if (sent < total) {
                         ssize_t nw = lsquic_stream_write(stream, senderPersistentContext.manifestBlob.data() + sent,

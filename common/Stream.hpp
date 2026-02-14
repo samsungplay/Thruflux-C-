@@ -226,6 +226,7 @@ namespace common {
 
 
         static void process() {
+            spdlog::info("process invoked");
             lsquic_engine_process_conns(engine_);
             lsquic_engine_send_unsent_packets(engine_);
         }
