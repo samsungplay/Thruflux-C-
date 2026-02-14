@@ -41,16 +41,15 @@ namespace receiver {
                                 }
                             }
 
-                            spdlog::info("Local");
 
                             common::IceHandler::gatherLocalCandidates(false, "", ReceiverConfig::totalConnections,
                                                                       [&socket](common::CandidatesResult result) {
-                                                            spdlog::info("k");
                                                                           socket.send(nlohmann::json(
                                                                               common::JoinTransferSessionPayload{
                                                                                   .candidatesResult = std::move(result),
                                                                                   .joinCode = ReceiverConfig::joinCode,
                                                                               }).dump());
+                                                                          spdlog::info("?!");
                                                                       });
                         });
                 } else if (type == "accept_transfer_session_payload") {
