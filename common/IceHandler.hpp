@@ -70,7 +70,7 @@ namespace common {
         static void dispose(const std::string &receiverId) {
             if (const auto it = agentsMap_.find(receiverId); it != agentsMap_.end()) {
                 NiceAgent *agent = it->second.agent;
-                g_signal_handlers_disconnect_matched(agent, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, NULL);
+                g_signal_handlers_disconnect_matched(agent, static_cast<GSignalMatchType>(G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA | G_SIGNAL_MATCH_ID), 0, 0, nullptr, nullptr, nullptr);
                 nice_agent_remove_stream(agent, it->second.streamId);
                 g_object_unref(agent);
                 agentsMap_.erase(it);
@@ -235,15 +235,12 @@ namespace common {
             }
 
 
-
             auto streamState = std::make_shared<IceStreamState>(n,
                                                                 std::move(callback));
 
             auto componentStateChangedCallback = [streamState = std::move(streamState), agent,n
                     ](guint stream_id, guint state) {
-                spdlog::info("ok0");
                 if (streamState->alreadyFired) return;
-                spdlog::info("ok1");
 
                 if (state == NICE_COMPONENT_STATE_READY) {
                     streamState->readyComponents++;
@@ -259,7 +256,6 @@ namespace common {
 
             auto componentStateChangedCallbackPtr = new decltype(componentStateChangedCallback)(
                 std::move(componentStateChangedCallback));
-
 
             g_signal_connect_data(agent, "component-state-changed",
                                   G_CALLBACK(
@@ -278,12 +274,9 @@ namespace common {
                                   static_cast<GConnectFlags>(0)
             );
 
-
-
             if (!nice_agent_gather_candidates(agent, streamId)) {
                 callback(nullptr, false, streamId, -1);
             }
-
         }
     };
 }
