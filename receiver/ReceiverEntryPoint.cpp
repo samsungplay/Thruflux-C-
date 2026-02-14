@@ -3,17 +3,18 @@
 #include <ixwebsocket/IXNetSystem.h>
 #include <spdlog/spdlog.h>
 #include "../common/Utils.hpp"
-#include <latch>
 #include <boost/algorithm/string.hpp>
 
 #include "ReceiverSocketHandler.hpp"
 
 int main(const int argc, char **argv) {
-    // spdlog::set_pattern("%v");
+    spdlog::set_pattern("%v");
 
     receiver::ReceiverConfig::initialize(argc, argv);
 
     common::IceHandler::initialize();
+
+    spdlog::info("?");
 
     std::vector<std::string> rawStunUrls;
     boost::split(rawStunUrls, receiver::ReceiverConfig::stunServers, boost::is_any_of(","), boost::token_compress_on);
