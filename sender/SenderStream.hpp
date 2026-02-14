@@ -167,12 +167,12 @@ namespace sender {
                         if (buf[0] == common::RECEIVER_MANIFEST_RECEIVED_ACK) {
                             //Time to blast data!
                             if (!connCtx->started) {
-                                connCtx->progressBar->set_option(
-                                  indicators::option::PostfixText{"starting..."});
-                                connCtx->progressBar->set_progress(0);
+                                auto &progressBar = senderPersistentContext.progressBars[connCtx->progressBarIndex];
+                                progressBar.set_option(
+                                    indicators::option::PostfixText{"starting..."});
+                                progressBar.set_progress(0);
                                 connCtx->started = true;
                                 connCtx->startTime = std::chrono::high_resolution_clock::now();
-
                             }
 
 
