@@ -254,6 +254,7 @@ namespace sender {
                             senderPersistentContext.fileChunkBase[f.id] + chunkInFile;
                     if (globalChunk < senderPersistentContext.totalChunks &&
                         common::Utils::getBit(connectionContext->resumeBitmap, globalChunk)) {
+                        connectionContext->bytesMoved += std::min(common::CHUNK_SIZE, f.size - off);
                         continue;
                     }
                 }
