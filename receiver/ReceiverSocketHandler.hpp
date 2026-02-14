@@ -42,15 +42,14 @@ namespace receiver {
                             }
 
 
-                            common::IceHandler::gatherLocalCandidates(false, "", ReceiverConfig::totalConnections,
-                                                                      [&socket](common::CandidatesResult result) {
-                                                                          socket.send(nlohmann::json(
-                                                                              common::JoinTransferSessionPayload{
-                                                                                  .candidatesResult = std::move(result),
-                                                                                  .joinCode = ReceiverConfig::joinCode,
-                                                                              }).dump());
-                                                                          spdlog::info("?!");
-                                                                      });
+                            // common::IceHandler::gatherLocalCandidates(false, "", ReceiverConfig::totalConnections,
+                            //                                           [&socket](common::CandidatesResult result) {
+                            //                                               socket.send(nlohmann::json(
+                            //                                                   common::JoinTransferSessionPayload{
+                            //                                                       .candidatesResult = std::move(result),
+                            //                                                       .joinCode = ReceiverConfig::joinCode,
+                            //                                                   }).dump());
+                            //                                           });
                         });
                 } else if (type == "accept_transfer_session_payload") {
                     const auto acceptedTransferSessionPayload = j.get<common::AcceptTransferSessionPayload>();
