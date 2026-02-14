@@ -56,17 +56,21 @@ namespace sender {
 
                         context->ewmaThroughput = ewmaThroughput;
 
-                        const double percent = (totalBytes <= 0.0) ? 0.0 : (static_cast<SenderConnectionContext *>(
-                            context)->logicalBytesMoved / totalBytes) * 100.0;
+                        const double percent = (totalBytes <= 0.0)
+                                                   ? 0.0
+                                                   : (static_cast<SenderConnectionContext *>(
+                                                          context)->logicalBytesMoved / totalBytes) * 100.0;
                         int p = static_cast<int>(std::lround(percent));
                         if (p < 0) p = 0;
                         if (p > 100) p = 100;
 
                         std::string postfix;
-                        postfix.reserve(128);
+                        postfix.reserve(256);
                         postfix += common::Utils::sizeToReadableFormat(ewmaThroughput);
                         postfix += "/s  sent ";
                         postfix += common::Utils::sizeToReadableFormat(context->bytesMoved);
+                        postfix += " resumed ";
+                        postfix += common::Utils::sizeToReadableFormat(context->skippedBytes);
                         postfix += "  files ";
                         postfix += std::to_string(context->filesMoved);
                         postfix += "/";
@@ -105,9 +109,11 @@ namespace sender {
                         progressBar.set_option(
                             indicators::option::ForegroundColor{indicators::Color::green});
                         std::string postfix;
-                        postfix.reserve(128);
+                        postfix.reserve(256);
                         postfix += " sent ";
                         postfix += common::Utils::sizeToReadableFormat(ctx->bytesMoved);
+                        postfix += " resumed ";
+                        postfix += common::Utils::sizeToReadableFormat(ctx->skippedBytes);
                         postfix += "  files ";
                         postfix += std::to_string(ctx->filesMoved);
                         postfix += "/";
@@ -120,7 +126,18 @@ namespace sender {
                         auto &progressBar = senderPersistentContext.progressBars[ctx->progressBarIndex];
                         progressBar.set_option(
                             indicators::option::ForegroundColor{indicators::Color::red});
-                        progressBar.set_option(indicators::option::PostfixText{" [FAILED]"});
+                        std::string postfix;
+                        postfix.reserve(256);
+                        postfix += " sent ";
+                        postfix += common::Utils::sizeToReadableFormat(ctx->bytesMoved);
+                        postfix += " resumed ";
+                        postfix += common::Utils::sizeToReadableFormat(ctx->skippedBytes);
+                        postfix += "  files ";
+                        postfix += std::to_string(ctx->filesMoved);
+                        postfix += "/";
+                        postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);
+                        postfix += " [FAILED]";
+                        progressBar.set_option(indicators::option::PostfixText{postfix});
                         senderPersistentContext.progressBars.print_progress();
                     }
                     std::erase(connectionContexts_, ctx);
@@ -177,11 +194,10 @@ namespace sender {
                             return;
                         }
                         connCtx->resumeBitmap.assign(connCtx->ackBuf.begin() + 5,
-                               connCtx->ackBuf.begin() + need);
+                                                     connCtx->ackBuf.begin() + need);
 
                         connCtx->ackBuf.erase(connCtx->ackBuf.begin(),
-                          connCtx->ackBuf.begin() + need);
-
+                                              connCtx->ackBuf.begin() + need);
 
 
                         //Time to blast data!

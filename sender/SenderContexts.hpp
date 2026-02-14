@@ -216,6 +216,7 @@ namespace sender {
         std::vector<uint8_t> resumeBitmap;
         uint64_t logicalBytesMoved = 0;
         uint64_t lastLogicalBytesMoved = 0;
+
     };
 
     struct SenderStreamContext {
@@ -256,7 +257,9 @@ namespace sender {
                             senderPersistentContext.fileChunkBase[f.id] + chunkInFile;
                     if (globalChunk < senderPersistentContext.totalChunks &&
                         common::Utils::getBit(connectionContext->resumeBitmap, globalChunk)) {
-                        connectionContext->logicalBytesMoved += std::min(common::CHUNK_SIZE, f.size - off);
+                        const auto len = std::min(common::CHUNK_SIZE, f.size - off);
+                        connectionContext->logicalBytesMoved += len;
+                        connectionContext->skippedBytes += len;
                         continue;
                     }
                 }

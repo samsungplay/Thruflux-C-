@@ -67,11 +67,15 @@ namespace receiver {
                 if (p > 100) p = 100;
 
                 std::string postfix;
-                postfix.reserve(128);
+                postfix.reserve(256);
                 postfix += common::Utils::sizeToReadableFormat(ewmaThroughput);
                 postfix += "/s  received ";
                 postfix += common::Utils::sizeToReadableFormat(receiverConnectionContext->bytesMoved);
+                postfix += " resumed ";
+                postfix += common::Utils::sizeToReadableFormat(receiverConnectionContext->skippedBytes);
+
                 postfix += "  files ";
+
                 postfix += std::to_string(receiverConnectionContext->filesMoved);
                 postfix += "/";
                 postfix += std::to_string(receiverConnectionContext->totalExpectedFilesCount);
@@ -143,9 +147,11 @@ namespace receiver {
                             indicators::option::ForegroundColor{indicators::Color::green});
 
                         std::string postfix;
-                        postfix.reserve(128);
+                        postfix.reserve(256);
                         postfix += " received ";
                         postfix += common::Utils::sizeToReadableFormat(ctx->bytesMoved);
+                        postfix += " resumed ";
+                        postfix += common::Utils::sizeToReadableFormat(ctx->skippedBytes);
                         postfix += "  files ";
                         postfix += std::to_string(ctx->filesMoved);
                         postfix += "/";
@@ -156,7 +162,18 @@ namespace receiver {
                         ctx->deleteResumeBitmap();
                     } else {
                         const auto &progressBar = ctx->progressBar;
-                        progressBar->set_option(indicators::option::PostfixText(" [FAILED]"));
+                        std::string postfix;
+                        postfix.reserve(256);
+                        postfix += " received ";
+                        postfix += common::Utils::sizeToReadableFormat(ctx->bytesMoved);
+                        postfix += " resumed ";
+                        postfix += common::Utils::sizeToReadableFormat(ctx->skippedBytes);
+                        postfix += "  files ";
+                        postfix += std::to_string(ctx->filesMoved);
+                        postfix += "/";
+                        postfix += std::to_string(ctx->totalExpectedFilesCount);
+                        postfix += " [FAILED]";
+                        progressBar->set_option(indicators::option::PostfixText(postfix));
                         progressBar->set_option(
                             indicators::option::ForegroundColor{indicators::Color::red});
                         ctx->maybeSaveBitmap(true);
@@ -300,7 +317,6 @@ namespace receiver {
 
                 if (ctx->type == ReceiverStreamContext::MANIFEST) {
                     if (connCtx->pendingManifestAck) {
-
                         uint8_t ack = common::RECEIVER_MANIFEST_RECEIVED_ACK;
                         uint32_t len = static_cast<uint32_t>(connCtx->resumeBitmap.size());
                         uint8_t hdr[5];
@@ -330,10 +346,9 @@ namespace receiver {
                             lsquic_stream_flush(stream);
                             connCtx->pendingManifestAck = false;
                             connCtx->manifestStream = stream;
-                            lsquic_stream_wantwrite(stream,0);
+                            lsquic_stream_wantwrite(stream, 0);
                         }
-                    }
-                    else if (connCtx->pendingCompleteAck) {
+                    } else if (connCtx->pendingCompleteAck) {
                         uint8_t ack = common::RECEIVER_TRANSFER_COMPLETE_ACK;
                         const auto nw = lsquic_stream_write(stream, &ack, 1);
                         if (nw == 1) {
