@@ -19,11 +19,21 @@ namespace receiver {
         std::vector<uint8_t> resumeBitmap;
         std::string resumeBitmapPath;
         size_t manifestAckSent = 0;
-        std::chrono::high_resolution_clock::time_point lastResumeBitmapFlush{};
+        std::chrono::steady_clock::time_point lastResumeBitmapFlush{};
         bool isResumeBitmapDirty = false;
         std::vector<uint32_t> fileTotalChunks;
         std::vector<uint32_t> fileDoneChunks;
         std::vector<uint8_t> fileCountedDone;
+        indicators::ProgressBar manifestProgressBar{
+            indicators::option::BarWidth{0},
+            indicators::option::Start{""},
+            indicators::option::End{""},
+            indicators::option::ShowPercentage{false},
+            indicators::option::PrefixText{"Fetching catalogue.. "},
+            indicators::option::PostfixText{" received 0B"},
+            indicators::option::ForegroundColor{indicators::Color::white}
+        };
+        std::chrono::steady_clock::time_point lastManifestProgressPrint{};
 
         void createProgressBar(std::string prefix) {
             progressBar = common::Utils::createProgressBarUniquePtr(prefix);
@@ -125,7 +135,7 @@ namespace receiver {
 
                     uint64_t resumedChunks = 0;
                     const uint64_t fullBytes = totalChunks / 8;
-                    const uint32_t remBits  = totalChunks % 8;
+                    const uint32_t remBits = totalChunks % 8;
 
                     for (uint64_t i = 0; i < fullBytes; ++i)
                         resumedChunks += __builtin_popcount(resumeBitmap[i]);
@@ -191,7 +201,7 @@ namespace receiver {
         void maybeSaveBitmap(bool force = false) {
             if (!isResumeBitmapDirty) return;
 
-            const auto now = std::chrono::high_resolution_clock::now();
+            const auto now = std::chrono::steady_clock::now();
             const bool timeOk =
                     (lastResumeBitmapFlush.time_since_epoch().count() == 0) ||
                     (std::chrono::duration<double>(now - lastResumeBitmapFlush).count() >= 2.0);

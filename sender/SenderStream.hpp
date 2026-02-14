@@ -17,7 +17,7 @@ namespace sender {
                 G_PRIORITY_HIGH,
                 250,
                 [](gpointer) -> gboolean {
-                    const auto now = std::chrono::high_resolution_clock::now();
+                    const auto now = std::chrono::steady_clock::now();
                     const double totalBytes = static_cast<double>(senderPersistentContext.totalExpectedBytes);
 
                     for (const auto &context: connectionContexts_) {
@@ -215,7 +215,7 @@ namespace sender {
                                 indicators::option::PostfixText{"starting..."});
                             progressBar.set_progress(0);
                             connCtx->started = true;
-                            connCtx->startTime = std::chrono::high_resolution_clock::now();
+                            connCtx->startTime = std::chrono::steady_clock::now();
                         }
 
 
@@ -231,7 +231,6 @@ namespace sender {
                     } else if (code == common::RECEIVER_TRANSFER_COMPLETE_ACK) {
                         connCtx->ackBuf.erase(connCtx->ackBuf.begin());
                         connCtx->complete = true;
-                        connCtx->endTime = std::chrono::high_resolution_clock::now();
                         lsquic_stream_shutdown(stream, 0);
                         if (connCtx->connection) {
                             lsquic_conn_close(connCtx->connection);

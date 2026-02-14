@@ -77,9 +77,8 @@ namespace common {
         mutable lsquic_conn_t *connection;
         sockaddr_storage localAddr;
         sockaddr_storage remoteAddr;
-        std::chrono::high_resolution_clock::time_point startTime;
-        std::chrono::high_resolution_clock::time_point lastTime;
-        std::chrono::high_resolution_clock::time_point endTime;
+        std::chrono::steady_clock::time_point startTime;
+        std::chrono::steady_clock::time_point lastTime;
         uint64_t bytesMoved = 0;
         uint64_t lastBytesMoved = 0;
         int filesMoved = 0;

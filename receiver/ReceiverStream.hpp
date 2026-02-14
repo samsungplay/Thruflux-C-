@@ -29,7 +29,7 @@ namespace receiver {
                 if (receiverConnectionContext->complete) {
                     return G_SOURCE_REMOVE;
                 }
-                const auto now = std::chrono::high_resolution_clock::now();
+                const auto now = std::chrono::steady_clock::now();
                 if (receiverConnectionContext->lastTime.time_since_epoch().count() == 0) {
                     receiverConnectionContext->lastTime = now;
                     receiverConnectionContext->progressBar->set_option(
@@ -205,7 +205,7 @@ namespace receiver {
                                         ? ReceiverStreamContext::MANIFEST
                                         : ReceiverStreamContext::DATA;
                         if (ctx->type == ReceiverStreamContext::DATA && !connCtx->started) {
-                            connCtx->startTime = std::chrono::high_resolution_clock::now();
+                            connCtx->startTime = std::chrono::steady_clock::now();
                             connCtx->progressBar->set_option(
                                 indicators::option::PostfixText{"starting..."});
                             connCtx->progressBar->set_progress(0);
@@ -225,8 +225,28 @@ namespace receiver {
                         }
                         //TODO add progress here
                         const auto nr = lsquic_stream_read(stream, tmp, sizeof(tmp));
-                        if (nr > 0) connCtx->manifestBuf.insert(connCtx->manifestBuf.end(), tmp, tmp + nr);
+                        if (nr > 0) {
+                            connCtx->manifestBuf.insert(connCtx->manifestBuf.end(), tmp, tmp + nr);
+                            std::string postfix;
+                            postfix.reserve(64);
+                            postfix += common::Utils::sizeToReadableFormat(static_cast<double>(connCtx->manifestBuf.size()));
+                            postfix += " received";
+                            connCtx->manifestProgressBar.set_option(indicators::option::PostfixText(postfix));
+                            const auto now = std::chrono::steady_clock::now();
+                            if (now - connCtx->lastManifestProgressPrint >= std::chrono::milliseconds(250)) {
+                                connCtx->manifestProgressBar.print_progress();
+                                connCtx->lastManifestProgressPrint = now;
+                            }
+
+                        }
                         if (nr == 0) {
+                            std::string postfix;
+                            postfix.reserve(64);
+                            postfix += common::Utils::sizeToReadableFormat((double)connCtx->manifestBuf.size());
+                            postfix += " received";
+                            connCtx->manifestProgressBar.set_option(indicators::option::PostfixText(postfix));
+                            connCtx->manifestProgressBar.mark_as_completed();
+
                             connCtx->parseManifest();
                             connCtx->manifestParsed = true;
                             connCtx->pendingManifestAck = true;
@@ -318,7 +338,6 @@ namespace receiver {
                             //transfer complete. needs to send ACK to sender..
                             connCtx->complete = true;
                             connCtx->pendingCompleteAck = true;
-                            connCtx->endTime = std::chrono::high_resolution_clock::now();
                             lsquic_stream_wantwrite(connCtx->manifestStream, 1);
                             lsquic_stream_wantread(stream, 0);
                             return;
