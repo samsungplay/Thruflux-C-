@@ -112,12 +112,10 @@ namespace sender {
                         postfix += std::to_string(ctx->filesMoved);
                         postfix += "/";
                         postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);
-
                         progressBar.set_option(indicators::option::PostfixText{postfix});
                         progressBar.set_progress(100);
                         senderPersistentContext.progressBars.print_progress();
                         progressBar.mark_as_completed();
-                        std::cout << std::endl;
                         const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
                         spdlog::info("Transfer completed for receiver {}", ctx->receiverId);
                         spdlog::info("Time taken: {}s", diff.count());
