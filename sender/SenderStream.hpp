@@ -138,6 +138,7 @@ namespace sender {
                         postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);
                         postfix += " [FAILED]";
                         progressBar.set_option(indicators::option::PostfixText{postfix});
+                        progressBar.mark_as_completed();
                         senderPersistentContext.progressBars.print_progress();
                     }
                     std::erase(connectionContexts_, ctx);
