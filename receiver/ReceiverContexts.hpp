@@ -105,7 +105,6 @@ namespace receiver {
                 }
 
                 if (loaded) {
-
                     filesMoved = 0;
                     for (uint32_t id = 0; id < fileSizes.size(); ++id) {
                         const uint64_t base = fileChunkBase[id];
@@ -125,9 +124,17 @@ namespace receiver {
                     }
 
                     uint64_t resumedChunks = 0;
-                    for (uint8_t b: resumeBitmap) {
-                        resumedChunks += __builtin_popcount(b);
+                    const uint64_t fullBytes = totalChunks / 8;
+                    const uint32_t remBits  = totalChunks % 8;
+
+                    for (uint64_t i = 0; i < fullBytes; ++i)
+                        resumedChunks += __builtin_popcount(resumeBitmap[i]);
+
+                    if (remBits) {
+                        const uint8_t mask = (1u << remBits) - 1u;
+                        resumedChunks += __builtin_popcount(static_cast<unsigned>(resumeBitmap[fullBytes] & mask));
                     }
+
                     const double percent =
                             totalChunks == 0 ? 0.0 : (static_cast<double>(resumedChunks) / totalChunks) * 100.0;
 
@@ -152,44 +159,29 @@ namespace receiver {
                          common::Utils::sizeToReadableFormat(totalExpectedBytes));
         }
 
-        uint64_t computeResumedBytes() {
+        uint64_t computeResumedBytes() const {
             uint64_t resumedBytes = 0;
 
             for (uint32_t id = 0; id < fileSizes.size(); ++id) {
                 const uint64_t sz = fileSizes[id];
-                if (sz == 0) {
-                    filesMoved++;
-                    continue;
-                }
+                if (sz == 0) continue;
 
                 const uint64_t base = fileChunkBase[id];
                 const uint64_t chunks = common::Utils::ceilDiv(sz, common::CHUNK_SIZE);
-                const uint64_t fullChunks = (chunks > 0) ? (chunks - 1) : 0;
-                const uint64_t lastChunkSize = sz - fullChunks * common::CHUNK_SIZE;
+                if (chunks == 0) continue;
 
-                bool all = true;
+                const uint64_t fullChunks = chunks - 1;
+                const uint64_t lastChunkSize = sz - fullChunks * common::CHUNK_SIZE;
 
                 for (uint64_t c = 0; c < fullChunks; ++c) {
                     const uint64_t g = base + c;
-                    if (g < totalChunks && common::Utils::getBit(resumeBitmap, g)) {
+                    if (g < totalChunks && common::Utils::getBit(resumeBitmap, g))
                         resumedBytes += common::CHUNK_SIZE;
-                    } else {
-                        all = false;
-                    }
                 }
 
-                if (chunks > 0) {
-                    const uint64_t g = base + (chunks - 1);
-                    if (g < totalChunks && common::Utils::getBit(resumeBitmap, g)) {
-                        resumedBytes += lastChunkSize;
-                    } else {
-                        all = false;
-                    }
-                }
-
-                if (all) {
-                    filesMoved++;
-                }
+                const uint64_t lastG = base + (chunks - 1);
+                if (lastG < totalChunks && common::Utils::getBit(resumeBitmap, lastG))
+                    resumedBytes += lastChunkSize;
             }
 
             if (resumedBytes > totalExpectedBytes) resumedBytes = totalExpectedBytes;
