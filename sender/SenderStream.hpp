@@ -23,14 +23,13 @@ namespace sender {
                     for (const auto &context: connectionContexts_) {
                         if (!context || !context->started || context->complete) continue;
 
-                        const auto &row = context->uiRow;
 
                         if (context->lastTime.time_since_epoch().count() == 0) {
                             context->lastTime = now;
                             context->lastBytesMoved = context->bytesMoved;
-                            context->uiRow->progressBar.set_option(
+                            context->progressBar->set_option(
                                 indicators::option::PostfixText{"starting..."});
-                            context->uiRow->progressBar.set_progress(0);
+                            context->progressBar->set_progress(0);
                             continue;
                         }
 
@@ -70,8 +69,8 @@ namespace sender {
                         postfix += "/";
                         postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);
 
-                        row->progressBar.set_option(indicators::option::PostfixText{postfix});
-                        row->progressBar.set_progress(p);
+                        context->progressBar->set_option(indicators::option::PostfixText{postfix});
+                        context->progressBar->set_progress(p);
 
                         context->lastTime = now;
                         context->lastBytesMoved = context->bytesMoved;
@@ -101,8 +100,7 @@ namespace sender {
                 lsquic_conn_set_ctx(connection, nullptr);
                 if (ctx) {
                     if (ctx->complete) {
-                        const auto &row = ctx->uiRow;
-                        row->progressBar.set_option(
+                        ctx->progressBar->set_option(
                             indicators::option::ForegroundColor{indicators::Color::green});
                         std::string postfix;
                         postfix.reserve(128);
@@ -113,8 +111,8 @@ namespace sender {
                         postfix += "/";
                         postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);
 
-                        row->progressBar.set_option(indicators::option::PostfixText{postfix});
-                        row->progressBar.set_progress(100);
+                        ctx->progressBar->set_option(indicators::option::PostfixText{postfix});
+                        ctx->progressBar->set_progress(100);
                         std::cout << "\n" << std::flush;
                         const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
                         spdlog::info("Transfer completed for receiver {}", ctx->receiverId);
@@ -351,7 +349,7 @@ namespace sender {
             ctx->streamId = streamId;
             ctx->receiverId = receiverId;
             const auto uiRow = std::make_shared<common::UiRow>("Receiver ID: " + ctx->receiverId);
-            ctx->uiRow = senderPersistentContext.addUiRow(uiRow);
+            ctx->progressBar = senderPersistentContext.addUiRow(uiRow);
 
 
             nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));

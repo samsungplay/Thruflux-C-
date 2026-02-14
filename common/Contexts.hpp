@@ -105,6 +105,7 @@ namespace common {
         bool complete = false;
         lsquic_stream_t *manifestStream = nullptr;
         std::shared_ptr<UiRow> uiRow = nullptr;
+        indicators::ProgressBar* progressBar;
 
         void initializeUI(std::string prefix) {
             uiRow = std::make_shared<UiRow>(prefix);
