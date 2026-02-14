@@ -113,6 +113,7 @@ namespace receiver {
 
                     bytesMoved = resumedBytes;
                     lastBytesMoved = resumedBytes;
+                    skippedBytes = resumedBytes;
                 }
             }
 

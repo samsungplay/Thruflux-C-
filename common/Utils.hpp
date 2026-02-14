@@ -72,7 +72,7 @@ namespace common {
             int exp = static_cast<int>(std::log(size) / std::log(1024));
             static const std::string units = "KMGTPE";
             exp = std::min(exp, static_cast<int>(units.length()));
-            return std::format("{:.2f} {}B", size / std::pow(1024, exp), units[exp - 1]);
+            return std::format("{:.2f}{}B", size / std::pow(1024, exp), units[exp - 1]);
         }
 
         static std::optional<StunServer> toStunServer(const std::string_view raw) {
