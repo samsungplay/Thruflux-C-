@@ -223,6 +223,7 @@ namespace receiver {
                             connCtx->manifestReceiveStartMessagePrinted = true;
                             spdlog::info("Fetching catalogue from sender...");
                         }
+                        //TODO add progress here
                         const auto nr = lsquic_stream_read(stream, tmp, sizeof(tmp));
                         if (nr > 0) connCtx->manifestBuf.insert(connCtx->manifestBuf.end(), tmp, tmp + nr);
                         if (nr == 0) {

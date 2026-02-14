@@ -257,7 +257,9 @@ namespace sender {
 
 
                 if (ctx->isManifestStream) {
+
                     size_t total = senderPersistentContext.manifestBlob.size();
+                    spdlog::info("sending manifest: {}/{}", connCtx->manifestSent, total);
                     size_t sent = connCtx->manifestSent;
                     if (sent < total) {
                         ssize_t nw = lsquic_stream_write(stream, senderPersistentContext.manifestBlob.data() + sent,
