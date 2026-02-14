@@ -266,8 +266,9 @@ namespace receiver {
                             ctx->headerBytesRead = 0;
                         }
 
-                        if (connCtx->filesMoved == connCtx->totalExpectedFilesCount) {
+                        if (!connCtx->complete && connCtx->filesMoved == connCtx->totalExpectedFilesCount) {
                             //transfer complete. needs to send ACK to sender..
+                            spdlog::info("YO: {}", connCtx->filesMoved );
                             connCtx->complete = true;
                             connCtx->pendingCompleteAck = true;
                             connCtx->endTime = std::chrono::high_resolution_clock::now();
