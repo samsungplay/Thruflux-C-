@@ -147,7 +147,7 @@ namespace sender {
         }
 
         void addUiRow(const std::shared_ptr<common::UiRow> uiRow) {
-            uiRows.push_back(std::move(uiRow));
+            uiRows.push_back(uiRow);
             progressBars.push_back(uiRow->progressBar);
         }
     };
