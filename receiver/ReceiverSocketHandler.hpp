@@ -42,6 +42,7 @@ namespace receiver {
                             }
 
 
+                            spdlog::info("?");
                             common::IceHandler::gatherLocalCandidates(false, "", ReceiverConfig::totalConnections,
                                                                       [&socket](common::CandidatesResult result) {
                                                                           socket.send(nlohmann::json(
