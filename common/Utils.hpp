@@ -12,8 +12,7 @@
 namespace common {
     class Utils {
     public:
-
-        static uint64_t fnv1a64(const uint8_t* data, const size_t len) {
+        static uint64_t fnv1a64(const uint8_t *data, const size_t len) {
             uint64_t hash = 1469598103934665603ull;
             for (size_t i = 0; i < len; ++i) {
                 hash ^= data[i];
@@ -32,39 +31,24 @@ namespace common {
             bm[idx >> 3] |= uint8_t(1u << (idx & 7));
         }
 
-        static std::unique_ptr<indicators::ProgressBar> createProgressBarUniquePtr(const std::string prefix) {
-            return std::unique_ptr<indicators::ProgressBar>(new indicators::ProgressBar(
-                indicators::option::BarWidth(32),
-                indicators::option::Start("["),
-                indicators::option::Fill("■"),
-                indicators::option::Lead("■"),
-                indicators::option::Remainder("."),
-                indicators::option::End("]"),
-                indicators::option::ShowPercentage(true),
-                indicators::option::ShowElapsedTime(true),
-                indicators::option::ShowRemainingTime(false),
-                indicators::option::PrefixText(std::move(prefix)),
-                indicators::option::MaxProgress(100),
-                indicators::option::ForegroundColor(indicators::Color::cyan)
-            ));
+        static std::unique_ptr<indicators::ProgressBar>
+        createProgressBarUniquePtr(std::string prefix) {
+            return std::make_unique<indicators::ProgressBar>(
+                indicators::option::BarWidth{40},
+                indicators::option::Start{"╭"},
+                indicators::option::Fill{"█"},
+                indicators::option::Lead{"▓"},
+                indicators::option::Remainder{"░"},
+                indicators::option::End{"╮"},
+                indicators::option::ShowPercentage{true},
+                indicators::option::ShowElapsedTime{true},
+                indicators::option::ShowRemainingTime{true},
+                indicators::option::PrefixText{std::move(prefix)},
+                indicators::option::MaxProgress{100},
+                indicators::option::ForegroundColor{indicators::Color::cyan}
+            );
         }
 
-        static indicators::ProgressBar createProgressBar(const std::string prefix) {
-            return indicators::ProgressBar{
-                indicators::option::BarWidth(32),
-                indicators::option::Start("["),
-                indicators::option::Fill("■"),
-                indicators::option::Lead("■"),
-                indicators::option::Remainder("."),
-                indicators::option::End("]"),
-                indicators::option::ShowPercentage(true),
-                indicators::option::ShowElapsedTime(true),
-                indicators::option::ShowRemainingTime(false),
-                indicators::option::PrefixText(std::move(prefix)),
-                indicators::option::MaxProgress(100),
-                indicators::option::ForegroundColor(indicators::Color::cyan)
-            };
-        }
 
         static std::string sizeToReadableFormat(const double size) {
             if (size <= 0.0) return "0 B";

@@ -13,7 +13,7 @@
 namespace common {
     inline constexpr char RECEIVER_MANIFEST_RECEIVED_ACK = 0x06;
     inline constexpr char RECEIVER_TRANSFER_COMPLETE_ACK = 0x07;
-    inline static constexpr uint64_t CHUNK_SIZE = 1024 * 1024;
+    inline static constexpr uint64_t CHUNK_SIZE = 2 * 1024 * 1024; //controls resume granularity & scheduling
 
     struct FileHandleCache {
         struct Entry {
@@ -90,6 +90,10 @@ namespace common {
 
         indicators::ProgressBar* progressBar;
         uint64_t skippedBytes = 0;
+
+        enum ConnectionType { DIRECT, RELAYED};
+
+        ConnectionType connectionType = DIRECT;
 
 
     };

@@ -75,6 +75,8 @@ namespace sender {
                         postfix += std::to_string(context->filesMoved);
                         postfix += "/";
                         postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);
+                        postfix += " ";
+                        postfix += context->connectionType == common::ConnectionContext::RELAYED ? "relayed" : "direct";
 
                         progressBar.set_option(indicators::option::PostfixText{postfix});
                         progressBar.set_progress(p);
@@ -118,7 +120,10 @@ namespace sender {
                         postfix += std::to_string(ctx->filesMoved);
                         postfix += "/";
                         postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);
+                        postfix += " ";
+                        postfix += ctx->connectionType == common::ConnectionContext::RELAYED ? "relayed" : "direct";
                         postfix += " [DONE]";
+
                         progressBar.set_option(indicators::option::PostfixText{postfix});
                         progressBar.set_progress(100);
                         senderPersistentContext.progressBars.print_progress();
@@ -136,6 +141,8 @@ namespace sender {
                         postfix += std::to_string(ctx->filesMoved);
                         postfix += "/";
                         postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);
+                        postfix += " ";
+                        postfix += ctx->connectionType == common::ConnectionContext::RELAYED ? "relayed" : "direct";
                         postfix += " [FAILED]";
                         progressBar.set_option(indicators::option::PostfixText{postfix});
                         progressBar.mark_as_completed();
@@ -387,7 +394,10 @@ namespace sender {
             ctx->streamId = streamId;
             ctx->receiverId = receiverId;
             ctx->progressBarIndex = senderPersistentContext.addNewProgressBar("Receiver ID: " + ctx->receiverId);
-
+            ctx->connectionType = (local->type == NICE_CANDIDATE_TYPE_RELAYED || remote->type == NICE_CANDIDATE_TYPE_RELAYED) ? common::ConnectionContext::RELAYED : common::ConnectionContext::DIRECT;
+            if (ctx->connectionType == common::ConnectionContext::RELAYED) {
+                senderPersistentContext.progressBars[ctx->progressBarIndex].set_option(indicators::option::ForegroundColor{indicators::Color::yellow});
+            }
 
             nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
             nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));

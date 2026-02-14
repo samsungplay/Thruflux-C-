@@ -79,6 +79,8 @@ namespace receiver {
                 postfix += std::to_string(receiverConnectionContext->filesMoved);
                 postfix += "/";
                 postfix += std::to_string(receiverConnectionContext->totalExpectedFilesCount);
+                postfix += " ";
+                   postfix += receiverConnectionContext->connectionType == common::ConnectionContext::RELAYED ? "relayed" : "direct";
                 receiverConnectionContext->progressBar->set_option(indicators::option::PostfixText{postfix});
                 receiverConnectionContext->progressBar->set_progress(p);;
                 receiverConnectionContext->lastTime = now;
@@ -156,6 +158,8 @@ namespace receiver {
                         postfix += std::to_string(ctx->filesMoved);
                         postfix += "/";
                         postfix += std::to_string(ctx->totalExpectedFilesCount);
+                        postfix += " ";
+                        postfix += ctx->connectionType == common::ConnectionContext::RELAYED ? "relayed" : "direct";
                         postfix += " [DONE]";
                         progressBar->set_option(indicators::option::PostfixText{postfix});
                         progressBar->set_progress(100);
@@ -172,6 +176,8 @@ namespace receiver {
                         postfix += std::to_string(ctx->filesMoved);
                         postfix += "/";
                         postfix += std::to_string(ctx->totalExpectedFilesCount);
+                        postfix += " ";
+                        postfix += ctx->connectionType == common::ConnectionContext::RELAYED ? "relayed" : "direct";
                         postfix += " [FAILED]";
                         progressBar->set_option(indicators::option::PostfixText(postfix));
                         progressBar->set_option(
@@ -432,10 +438,14 @@ namespace receiver {
             ctx->agent = agent;
             ctx->streamId = streamId;
             ctx->createProgressBar("Receiving ");
-
+            ctx->connectionType = (local->type == NICE_CANDIDATE_TYPE_RELAYED || remote->type == NICE_CANDIDATE_TYPE_RELAYED) ? common::ConnectionContext::RELAYED : common::ConnectionContext::DIRECT;
+            if (ctx->connectionType == common::ConnectionContext::RELAYED) {
+                ctx->progressBar->set_option(indicators::option::ForegroundColor{indicators::Color::yellow});
+            }
 
             nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
             nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));
+
 
 
             connectionContexts_.push_back(ctx);
