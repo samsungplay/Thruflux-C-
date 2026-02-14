@@ -23,7 +23,7 @@ namespace sender {
                     for (const auto &context: connectionContexts_) {
                         if (!context || !context->started || context->complete) continue;
 
-                        const auto &row = context->uiRow;
+                        const auto row = context->uiRow;
 
                         if (context->lastTime.time_since_epoch().count() == 0) {
                             context->lastTime = now;
