@@ -17,69 +17,69 @@
 namespace receiver {
     class ReceiverStream : public common::Stream {
         static void watchProgress() {
-            // g_timeout_add_full(G_PRIORITY_HIGH, 250, [](gpointer data)-> gboolean {
-            //     auto *receiverConnectionContext = static_cast<ReceiverConnectionContext *>(
-            //         connectionContexts_[0]);
-            //     if (!receiverConnectionContext || !receiverConnectionContext->started) {
-            //         return G_SOURCE_CONTINUE;
-            //     }
-            //     if (receiverConnectionContext->complete) {
-            //         return G_SOURCE_REMOVE;
-            //     }
-            //     const auto now = std::chrono::high_resolution_clock::now();
-            //     if (receiverConnectionContext->lastTime.time_since_epoch().count() == 0) {
-            //         receiverConnectionContext->lastTime = now;
-            //         receiverConnectionContext->uiRow->progressBar.set_option(
-            //             indicators::option::PostfixText{"starting..."});
-            //         receiverConnectionContext->uiRow->progressBar.set_progress(0);
-            //         return G_SOURCE_CONTINUE;
-            //     }
-            //
-            //     std::chrono::duration<double> elapsed = now - receiverConnectionContext->startTime;
-            //     std::chrono::duration<double> delta = now - receiverConnectionContext->lastTime;
-            //
-            //     const double elapsedSeconds = elapsed.count();
-            //     const double deltaSeconds = delta.count();
-            //
-            //     const double safeDelta = (deltaSeconds > 1e-6) ? deltaSeconds : 1e-6;
-            //     const double safeElapsed = (elapsedSeconds > 1e-6) ? elapsedSeconds : 1e-6;
-            //
-            //     const double instantThroughput =
-            //             (receiverConnectionContext->bytesMoved - receiverConnectionContext->lastBytesMoved) /
-            //             safeDelta;
-            //     const double averageThroughput = receiverConnectionContext->bytesMoved / safeElapsed;
-            //     const double ewmaThroughput = receiverConnectionContext->ewmaThroughput == 0
-            //                                       ? instantThroughput
-            //                                       : 0.2 * instantThroughput + 0.8 * receiverConnectionContext->
-            //                                         ewmaThroughput;
-            //     receiverConnectionContext->ewmaThroughput = ewmaThroughput;
-            //
-            //     const double totalBytes = receiverConnectionContext->totalExpectedBytes;
-            //
-            //     const double percent = (totalBytes <= 0.0)
-            //                                ? 0.0
-            //                                : (receiverConnectionContext->bytesMoved / totalBytes) * 100.0;
-            //     int p = static_cast<int>(std::lround(percent));
-            //     if (p < 0) p = 0;
-            //     if (p > 100) p = 100;
-            //
-            //     std::string postfix;
-            //     postfix.reserve(128);
-            //     postfix += common::Utils::sizeToReadableFormat(ewmaThroughput);
-            //     postfix += "/s  received ";
-            //     postfix += common::Utils::sizeToReadableFormat(receiverConnectionContext->bytesMoved);
-            //     postfix += "  files ";
-            //     postfix += std::to_string(receiverConnectionContext->filesMoved);
-            //     postfix += "/";
-            //     postfix += std::to_string(receiverConnectionContext->totalExpectedFilesCount);
-            //     receiverConnectionContext->uiRow->progressBar.set_option(indicators::option::PostfixText{postfix});
-            //     receiverConnectionContext->uiRow->progressBar.set_progress(p);
-            //
-            //     receiverConnectionContext->lastTime = now;
-            //     receiverConnectionContext->lastBytesMoved = receiverConnectionContext->bytesMoved;
-            //
-            //     return G_SOURCE_CONTINUE;
-            // }, nullptr, nullptr);
+            g_timeout_add_full(G_PRIORITY_HIGH, 250, [](gpointer data)-> gboolean {
+                auto *receiverConnectionContext = static_cast<ReceiverConnectionContext *>(
+                    connectionContexts_[0]);
+                if (!receiverConnectionContext || !receiverConnectionContext->started) {
+                    return G_SOURCE_CONTINUE;
+                }
+                if (receiverConnectionContext->complete) {
+                    return G_SOURCE_REMOVE;
+                }
+                const auto now = std::chrono::high_resolution_clock::now();
+                if (receiverConnectionContext->lastTime.time_since_epoch().count() == 0) {
+                    receiverConnectionContext->lastTime = now;
+                    receiverConnectionContext->uiRow->progressBar.set_option(
+                        indicators::option::PostfixText{"starting..."});
+                    receiverConnectionContext->uiRow->progressBar.set_progress(0);
+                    return G_SOURCE_CONTINUE;
+                }
+
+                std::chrono::duration<double> elapsed = now - receiverConnectionContext->startTime;
+                std::chrono::duration<double> delta = now - receiverConnectionContext->lastTime;
+
+                const double elapsedSeconds = elapsed.count();
+                const double deltaSeconds = delta.count();
+
+                const double safeDelta = (deltaSeconds > 1e-6) ? deltaSeconds : 1e-6;
+                const double safeElapsed = (elapsedSeconds > 1e-6) ? elapsedSeconds : 1e-6;
+
+                const double instantThroughput =
+                        (receiverConnectionContext->bytesMoved - receiverConnectionContext->lastBytesMoved) /
+                        safeDelta;
+                const double averageThroughput = receiverConnectionContext->bytesMoved / safeElapsed;
+                const double ewmaThroughput = receiverConnectionContext->ewmaThroughput == 0
+                                                  ? instantThroughput
+                                                  : 0.2 * instantThroughput + 0.8 * receiverConnectionContext->
+                                                    ewmaThroughput;
+                receiverConnectionContext->ewmaThroughput = ewmaThroughput;
+
+                const double totalBytes = receiverConnectionContext->totalExpectedBytes;
+
+                const double percent = (totalBytes <= 0.0)
+                                           ? 0.0
+                                           : (receiverConnectionContext->bytesMoved / totalBytes) * 100.0;
+                int p = static_cast<int>(std::lround(percent));
+                if (p < 0) p = 0;
+                if (p > 100) p = 100;
+
+                std::string postfix;
+                postfix.reserve(128);
+                postfix += common::Utils::sizeToReadableFormat(ewmaThroughput);
+                postfix += "/s  received ";
+                postfix += common::Utils::sizeToReadableFormat(receiverConnectionContext->bytesMoved);
+                postfix += "  files ";
+                postfix += std::to_string(receiverConnectionContext->filesMoved);
+                postfix += "/";
+                postfix += std::to_string(receiverConnectionContext->totalExpectedFilesCount);
+                receiverConnectionContext->uiRow->progressBar.set_option(indicators::option::PostfixText{postfix});
+                receiverConnectionContext->uiRow->progressBar.set_progress(p);
+
+                receiverConnectionContext->lastTime = now;
+                receiverConnectionContext->lastBytesMoved = receiverConnectionContext->bytesMoved;
+
+                return G_SOURCE_CONTINUE;
+            }, nullptr, nullptr);
         }
 
         static int alpnSelectCallback(SSL *ssl, const unsigned char **out, unsigned char *outlen,
@@ -149,8 +149,11 @@ namespace receiver {
                         postfix += std::to_string(ctx->filesMoved);
                         postfix += "/";
                         postfix += std::to_string(ctx->totalExpectedFilesCount);
+
                         row->progressBar.set_option(indicators::option::PostfixText{postfix});
                         std::cout << "\n" << std::flush;
+
+                        spdlog::info(postfix);
 
                         const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
                         spdlog::info("Transfer completed.");
