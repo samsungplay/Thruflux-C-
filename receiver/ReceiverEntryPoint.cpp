@@ -47,15 +47,15 @@ int main(const int argc, char **argv) {
     socketClient.setExtraHeaders(headers);
     socketClient.setPingInterval(30);
 
-    // socketClient.setOnMessageCallback([&socketClient](const ix::WebSocketMessagePtr &msg) {
-    //     if (msg->type == ix::WebSocketMessageType::Open) {
-    //         receiver::ReceiverSocketHandler::onConnect(socketClient);
-    //     } else if (msg->type == ix::WebSocketMessageType::Message) {
-    //         receiver::ReceiverSocketHandler::onMessage(socketClient, msg->str);
-    //     } else if (msg->type == ix::WebSocketMessageType::Close) {
-    //         receiver::ReceiverSocketHandler::onClose(socketClient,  msg->closeInfo.reason);
-    //     }
-    // });
+    socketClient.setOnMessageCallback([&socketClient](const ix::WebSocketMessagePtr &msg) {
+        if (msg->type == ix::WebSocketMessageType::Open) {
+            receiver::ReceiverSocketHandler::onConnect(socketClient);
+        } else if (msg->type == ix::WebSocketMessageType::Message) {
+            receiver::ReceiverSocketHandler::onMessage(socketClient, msg->str);
+        } else if (msg->type == ix::WebSocketMessageType::Close) {
+            receiver::ReceiverSocketHandler::onClose(socketClient,  "");
+        }
+    });
 
     spdlog::info("Connecting to relay... {}", receiver::ReceiverConfig::serverUrl);
 
