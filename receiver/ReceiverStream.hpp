@@ -18,6 +18,9 @@ namespace receiver {
     class ReceiverStream : public common::Stream {
         static void watchProgress() {
             g_timeout_add_full(G_PRIORITY_HIGH, 250, [](gpointer data)-> gboolean {
+                if (connectionContexts_.empty()) {
+                    return G_SOURCE_CONTINUE;
+                }
                 auto *receiverConnectionContext = static_cast<ReceiverConnectionContext *>(
                     connectionContexts_[0]);
                 if (!receiverConnectionContext || !receiverConnectionContext->started) {
@@ -363,7 +366,6 @@ namespace receiver {
             api.ea_packets_out = sendPackets;
             api.ea_get_ssl_ctx = getSslCtx;
             engine_ = lsquic_engine_new(LSENG_SERVER, &api);
-            spdlog::info("OK");
             watchProgress();
         }
 
