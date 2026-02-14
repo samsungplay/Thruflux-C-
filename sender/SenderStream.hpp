@@ -56,7 +56,8 @@ namespace sender {
 
                         context->ewmaThroughput = ewmaThroughput;
 
-                        const double percent = (totalBytes <= 0.0) ? 0.0 : (bytesMoved / totalBytes) * 100.0;
+                        const double percent = (totalBytes <= 0.0) ? 0.0 : (static_cast<SenderConnectionContext *>(
+                            context)->logicalBytesMoved / totalBytes) * 100.0;
                         int p = static_cast<int>(std::lround(percent));
                         if (p < 0) p = 0;
                         if (p > 100) p = 100;
@@ -278,6 +279,7 @@ namespace sender {
                         }
                         ctx->bytesSent += nw;
                         connCtx->bytesMoved += nw;
+                        connCtx->logicalBytesMoved += nw;
 
                         if (ctx->bytesSent >= ctx->len) {
                             ctx->currentMmap = nullptr;
