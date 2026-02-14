@@ -150,6 +150,7 @@ namespace receiver {
                         postfix += "/";
                         postfix += std::to_string(ctx->totalExpectedFilesCount);
                         row->progressBar.set_option(indicators::option::PostfixText{postfix});
+                        std::cout << "\n" << std::flush;
 
                         const std::chrono::duration<double> diff = ctx->endTime - ctx->startTime;
                         spdlog::info("Transfer completed.");
