@@ -52,6 +52,7 @@ namespace sender {
         std::list<uint32_t> lruList;
         const size_t MAX_MMAPS = 16;
         int globalCnt =0;
+        std::list<std::unique_ptr<indicators::ProgressBar>> progressBarsStorage;
         indicators::DynamicProgress<indicators::ProgressBar> progressBars;
 
         void buildManifest(const std::vector<std::string>& paths) {
@@ -146,8 +147,8 @@ namespace sender {
         }
 
         int addNewProgressBar(std::string prefix) {
-            auto bar = common::Utils::createProgressBar(std::move(prefix));
-            const size_t id = progressBars.push_back(bar);
+            progressBarsStorage.push_back(common::Utils::createProgressBarUniquePtr(std::move(prefix)));
+            const size_t id = progressBars.push_back(*progressBarsStorage.back());
             return id;
         }
     };
