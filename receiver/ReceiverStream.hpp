@@ -351,7 +351,6 @@ namespace receiver {
             settings.es_max_cfcw = ReceiverConfig::quicConnWindowBytes * 2;
             settings.es_max_sfcw = ReceiverConfig::quicStreamWindowBytes * 2;
 
-            spdlog::info("?");
 
             char err_buf[256];
             if (0 != lsquic_engine_check_settings(&settings, LSENG_SERVER, err_buf, sizeof(err_buf))) {
@@ -364,6 +363,7 @@ namespace receiver {
             api.ea_packets_out = sendPackets;
             api.ea_get_ssl_ctx = getSslCtx;
             engine_ = lsquic_engine_new(LSENG_SERVER, &api);
+            spdlog::info("OK");
             watchProgress();
         }
 
