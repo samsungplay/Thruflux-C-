@@ -363,8 +363,6 @@ namespace receiver {
             api.ea_get_ssl_ctx = getSslCtx;
             engine_ = lsquic_engine_new(LSENG_SERVER, &api);
             watchProgress();
-
-            spdlog::info("LSQUIC Engine Successfully Initialized. {}", engine_ == nullptr);
         }
 
 
