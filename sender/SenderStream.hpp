@@ -120,6 +120,7 @@ namespace sender {
                         progressBar.set_option(
                            indicators::option::ForegroundColor{indicators::Color::red});
                         progressBar.set_option(indicators::option::PostfixText{" [FAILED]"});
+                        senderPersistentContext.progressBars.print_progress();
                     }
                     std::erase(connectionContexts_, ctx);
                     ctx->connection = nullptr;
