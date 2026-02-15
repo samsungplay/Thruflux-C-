@@ -68,6 +68,11 @@ namespace server {
                         return;
                     }
                     const auto transferSession = TransferSessionStore::instance().createSessionFrom(session, payload);
+                    if (!transferSession) {
+                        session->end(4000, "Server has reached max number of sessions");
+                        return;
+                    }
+
                     session->send(nlohmann::json(common::CreatedTransferSessionPayload{
                         .joinCode = transferSession->joinCode()
                     }).dump());

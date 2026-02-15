@@ -8,7 +8,7 @@ namespace server {
     class ServerConfig {
     public:
         inline static int port = 8080;
-        inline static int maxSessions = 1000;
+        inline static int maxSessions = 1;
         inline static int maxReceiversPerSender = 10;
         inline static int maxMessageBytes = 65536;
         inline static int wsConnectionsPerMin = 30;

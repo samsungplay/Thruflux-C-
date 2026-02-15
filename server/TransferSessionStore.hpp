@@ -47,10 +47,17 @@ namespace server {
         std::shared_ptr<TransferSession> createSessionFrom(common::Session* senderSession, const common::CreateTransferSessionPayload& payload) {
             auto& id = senderSession->getUserData()->id;
             auto transferSession = std::make_shared<TransferSession>(id, payload);
-            cache_.put(id, transferSession);
+            try {
+                cache_.put(id, transferSession);
+            }
+            catch (std::exception& e) {
+                spdlog::warn("A session could not be created due to max sessions limit: {}", ServerConfig::maxSessions);
+                return nullptr;
+            }
             spdlog::info("New session with join code {} has been created", transferSession->joinCode());
             return transferSession;
         }
+
 
 
         void cleanExpiredSessions() {
