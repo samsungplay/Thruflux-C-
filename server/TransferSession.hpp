@@ -64,15 +64,15 @@ namespace server {
             receiverIds_.erase(receiverId);
         }
 
-        void destroy() {
+        void destroy(std::string customErrorMessage = "Session destroyed") {
             spdlog::info("A session with join code {} has been destroyed.", joinCode_);
             if (const auto it = sessionTracker.find(senderSessionId_); it != sessionTracker.end()) {
-                it->second->end(4000, "Session destroyed");
+                it->second->end(4000, std::move(customErrorMessage));
             }
 
             for (const auto &receiverId: receiverIds_) {
                 if (const auto pair = sessionTracker.find(receiverId); pair != sessionTracker.end()) {
-                    pair->second->end(4000, "Session destroyed");
+                    pair->second->end(4000, std::move(customErrorMessage));
                 }
             }
             receiverIds_.clear();

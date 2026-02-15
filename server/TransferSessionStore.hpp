@@ -75,7 +75,7 @@ namespace server {
                [](const std::shared_ptr<TransferSession>& transferSession) {
                    if (!transferSession) return;
                    spdlog::info("A session with join code {} has expired, destroying the session.", transferSession->joinCode());
-                   transferSession->destroy();
+                   transferSession->destroy("Session expired");
                }
            ) {}
     };
