@@ -9,6 +9,7 @@
 
 int main(const int argc, char **argv) {
     spdlog::set_pattern("%v");
+    common::Utils::disableLibniceLogging();
 
     receiver::ReceiverConfig::initialize(argc, argv);
 

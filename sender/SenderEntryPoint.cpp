@@ -13,6 +13,7 @@
 int main(const int argc, char **argv) {
 
     spdlog::set_pattern("%v");
+    common::Utils::disableLibniceLogging();
 
     sender::SenderConfig::initialize(argc, argv);
 

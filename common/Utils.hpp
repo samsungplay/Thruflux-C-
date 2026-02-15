@@ -12,6 +12,17 @@
 namespace common {
     class Utils {
     public:
+        static void silenceLogs(const gchar *log_domain, GLogLevelFlags log_level,
+                                const gchar *message, gpointer user_data) {
+        }
+
+        static void disableLibniceLogging() {
+            g_log_set_handler("libnice",
+                              (GLogLevelFlags) (G_LOG_LEVEL_CRITICAL | G_LOG_LEVEL_WARNING),
+                              silenceLogs,
+            nullptr);
+        }
+
         static uint64_t fnv1a64(const uint8_t *data, const size_t len) {
             uint64_t hash = 1469598103934665603ull;
             for (size_t i = 0; i < len; ++i) {
