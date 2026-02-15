@@ -14,7 +14,6 @@
     "liblsquic",
     "libnice",
     "nlohmann-json",
-    "quictls",
     "spdlog",
     "uwebsockets"
   ],
