@@ -21,9 +21,6 @@
     "name" : "boost-bind",
     "version>=" : "1.90.0#1"
   }, {
-    "name" : "boost-cmake",
-    "version>=" : "1.90.0#1"
-  }, {
     "name" : "boost-concept-check",
     "version>=" : "1.90.0#1"
   }, {
@@ -141,9 +138,6 @@
     "name" : "boost-typeof",
     "version>=" : "1.90.0#1"
   }, {
-    "name" : "boost-uninstall",
-    "version>=" : "1.90.0#1"
-  }, {
     "name" : "boost-unordered",
     "version>=" : "1.90.0#1"
   }, {
@@ -206,25 +200,7 @@
   }, {
     "name" : "uwebsockets",
     "version>=" : "20.74.0"
-  }, {
-    "name" : "vcpkg-boost",
-    "version>=" : "2025-03-29"
-  }, {
-    "name" : "vcpkg-cmake-config",
-    "version>=" : "2024-05-23"
-  }, {
-    "name" : "vcpkg-cmake-get-vars",
-    "version>=" : "2025-05-29"
-  }, {
-    "name" : "vcpkg-cmake",
-    "version>=" : "2024-04-23"
-  }, {
-    "name" : "vcpkg-make",
-    "version>=" : "2026-01-01"
-  }, {
-    "name" : "vcpkg-tool-meson",
-    "version>=" : "1.9.0#3"
-  }, {
+  },  {
     "name" : "zlib",
     "version>=" : "1.3.1"
   }, {

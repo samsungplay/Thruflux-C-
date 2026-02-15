@@ -30,6 +30,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install System Dependencies
+        shell: bash
+        run: |
+                if [ "${{ runner.os }}" = "Linux" ]; then
+                  sudo apt-get update && sudo apt-get install -y nasm
+                elif [ "${{ runner.os }}" = "macOS" ]; then
+                  brew install nasm
+                elif [ "${{ runner.os }}" = "Windows" ]; then
+                  # vcpkg usually handles nasm on Windows, but if not:
+                  choco install nasm
+                fi
+
       - name: Get Latest CMake
         uses: lukka/get-cmake@latest
 
@@ -82,7 +94,7 @@ jobs:
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [build]
+    needs: [ build ]
     steps:
       - name: Download Artifacts
         uses: actions/download-artifact@v4
