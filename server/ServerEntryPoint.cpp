@@ -14,14 +14,25 @@ int main(const int argc, char **argv) {
 
     auto *loop = reinterpret_cast<struct us_loop_t *>(uWS::Loop::get());
 
+    auto rateLimiter = common::TokenBucket(server::ServerConfig::wsConnectionsPerMin / 60.0, server::ServerConfig::wsConnectionsBurst);
+
     us_timer_t *timer = us_create_timer(loop, 0, 0);
     us_timer_set(timer, [](struct us_timer_t *t) {
         server::TransferSessionStore::instance().cleanExpiredSessions();
     }, 5000, 5000);
 
     uWS::App().ws<common::SocketUserData>("/ws", {
+                                              .maxPayloadLength = server::ServerConfig::maxMessageBytes,
                                               .idleTimeout = server::ServerConfig::wsIdleTimeout,
-                                              .upgrade = [](auto *res, auto *req, auto *context) {
+                                              .upgrade = [&rateLimiter](auto *res, auto *req, auto *context) {
+
+                                                  if (!rateLimiter.allow()) {
+                                                      res->writeStatus("429 Too Many Requests")
+                                                      ->writeHeader("Retry-After", "60")
+                                                      ->end("Too many websocket connections at once, please slow down!");
+                                                      return;
+                                                  }
+
                                                   auto role = std::string(req->getHeader("x-role"));
                                                   auto id = std::string(req->getHeader("x-id"));
 

@@ -10,7 +10,7 @@ namespace server {
         inline static int port = 8080;
         inline static int maxSessions = 1000;
         inline static int maxReceiversPerSender = 10;
-        inline static int maxMessageBytes = 65536;
+        inline static unsigned int maxMessageBytes = 65536;
         inline static int wsConnectionsPerMin = 30;
         inline static int wsConnectionsBurst = 10;
         inline static int wsMessagesPerSec = 50;
@@ -29,9 +29,9 @@ namespace server {
             app.add_option("--port", port, "Port to run the server on.")->capture_default_str();
             app.add_option("--max-sessions", maxSessions, "Max number of concurrent transfer sessions.")->capture_default_str();
             app.add_option("--max-receivers-per-sender", maxReceiversPerSender, "Max number of receivers to allow per sender")->capture_default_str();
-            app.add_option("--max-message-bytes", maxMessageBytes)->capture_default_str();
-            app.add_option("--ws-connections-per-min", wsConnectionsPerMin)->capture_default_str();
-            app.add_option("--ws-connections-burst", wsConnectionsBurst)->capture_default_str();
+            app.add_option("--max-message-bytes", maxMessageBytes, "Max message size of a single websocket payload in bytes")->capture_default_str();
+            app.add_option("--ws-connections-per-min", wsConnectionsPerMin, "New websocket connections allowed per minute")->capture_default_str();
+            app.add_option("--ws-connections-burst", wsConnectionsBurst, "New burst websocket connections allowed per minute")->capture_default_str();
             app.add_option("--ws-messages-per-sec", wsMessagesPerSec)->capture_default_str();
             app.add_option("--ws-messages-burst", wsMessagesBurst)->capture_default_str();
             app.add_option("--session-creates-per-min", sessionCreatesPerMin)->capture_default_str();

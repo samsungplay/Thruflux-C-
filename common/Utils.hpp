@@ -8,8 +8,45 @@
 
 #include "IceHandler.hpp"
 #include <indicators/progress_bar.hpp>
+#include <chrono>
+#include <mutex>
+
 
 namespace common {
+    class TokenBucket {
+    public:
+        TokenBucket(const double ratesPerSec, const double burst)
+            : ratesPerSec(ratesPerSec), capacity_(burst), tokens_(burst),
+              last_(std::chrono::steady_clock::now()) {
+        }
+
+        bool allow(const double cost = 1.0) {
+            std::lock_guard lock(mu_);
+            refillLocked();
+            if (tokens_ >= cost) {
+                tokens_ -= cost;
+                return true;
+            }
+            return false;
+        }
+
+    private:
+        void refillLocked() {
+            const auto now = std::chrono::steady_clock::now();
+            std::chrono::duration<double> dt = now - last_;
+            last_ = now;
+
+            tokens_ = std::min(capacity_, tokens_ + dt.count() * ratesPerSec);
+        }
+
+        double ratesPerSec;
+        double capacity_;
+        double tokens_;
+        std::chrono::steady_clock::time_point last_;
+        std::mutex mu_;
+    };
+
+
     class Utils {
     public:
         static void silenceLogs(const gchar *log_domain, GLogLevelFlags log_level,
@@ -20,7 +57,7 @@ namespace common {
             g_log_set_handler("libnice",
                               (GLogLevelFlags) (G_LOG_LEVEL_CRITICAL | G_LOG_LEVEL_WARNING),
                               silenceLogs,
-            nullptr);
+                              nullptr);
         }
 
         static uint64_t fnv1a64(const uint8_t *data, const size_t len) {
