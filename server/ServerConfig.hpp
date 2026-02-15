@@ -32,8 +32,8 @@ namespace server {
             app.add_option("--max-message-bytes", maxMessageBytes, "Max message size of a single websocket payload in bytes")->capture_default_str();
             app.add_option("--ws-connections-per-min", wsConnectionsPerMin, "New websocket connections allowed per minute")->capture_default_str();
             app.add_option("--ws-connections-burst", wsConnectionsBurst, "New burst websocket connections allowed per minute")->capture_default_str();
-            app.add_option("--ws-messages-per-sec", wsMessagesPerSec)->capture_default_str();
-            app.add_option("--ws-messages-burst", wsMessagesBurst)->capture_default_str();
+            app.add_option("--ws-messages-per-sec", wsMessagesPerSec, "Websocket messages allowed per second")->capture_default_str();
+            app.add_option("--ws-messages-burst", wsMessagesBurst, "Burst websocket messages allowed per second")->capture_default_str();
             app.add_option("--session-creates-per-min", sessionCreatesPerMin)->capture_default_str();
             app.add_option("--session-creates-burst", sessionCreatesBurst)->capture_default_str();
             app.add_option("--max-ws-connections", maxWsConnections)->capture_default_str();
