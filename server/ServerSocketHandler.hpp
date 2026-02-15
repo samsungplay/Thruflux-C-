@@ -62,6 +62,10 @@ namespace server {
                 const std::string type = j.value("type", "");
                 if (isSender && type == "create_transfer_session_payload") {
                     const auto payload = j.get<common::CreateTransferSessionPayload>();
+                    if (payload.maxReceivers > ServerConfig::maxReceiversPerSender) {
+                        session->end(4000, "Server forbids sender to have max receivers of more than " + std::to_string(ServerConfig::maxReceiversPerSender));
+                        return;
+                    }
                     if (const auto currentTransfer = TransferSessionStore::instance().getTransferSession(
                         session->getUserData()->id); currentTransfer.has_value()) {
                         session->end(4000, "Duplicate Session");
