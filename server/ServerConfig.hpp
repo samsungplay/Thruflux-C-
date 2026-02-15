@@ -35,8 +35,8 @@ namespace server {
             app.add_option("--ws-messages-per-sec", wsMessagesPerSec, "Websocket messages allowed per second")->capture_default_str();
             app.add_option("--ws-messages-burst", wsMessagesBurst, "Burst websocket messages allowed per second")->capture_default_str();
             app.add_option("--max-ws-connections", maxWsConnections, "Max concurrent websocket connections (includes senders and receivers).")->capture_default_str();
-            app.add_option("--ws-idle-timeout", wsIdleTimeout)->capture_default_str();
-            app.add_option("--session-timeout", sessionTimeout)->capture_default_str();
+            app.add_option("--ws-idle-timeout", wsIdleTimeout, "Max websocket idle timeout in seconds")->capture_default_str();
+            app.add_option("--session-timeout", sessionTimeout, "Max lifetime of a transfer session in seconds. When expired, transfers automatically abort.")->capture_default_str();
             app.add_option("--turn-server", turnServer);
             app.add_option("--turn-static-auth-secret", turnStaticAuthSecret);
             app.add_option("--turn-static-cred-ttl", turnStaticCredTtl)->capture_default_str();
