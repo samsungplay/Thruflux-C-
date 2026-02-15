@@ -1,0 +1,96 @@
+name: Thruflux Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            triplet: x64-linux
+            asset_name: linux.tar.gz
+          - os: macos-latest
+            triplet: x64-osx
+            asset_name: macos.tar.gz
+          - os: windows-latest
+            triplet: x64-windows-static
+            asset_name: windows.zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgJsonGlob: "**/vcpkg.json"
+
+      - name: Configure CMake
+        shell: bash
+        run: |
+          # Use VCPKG_INSTALLATION_ROOT (standard GH env var)
+          cmake -S . -B build \
+            -DCMAKE_TOOLCHAIN_FILE="${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+
+      - name: Package Binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          TAG="${GITHUB_REF_NAME}"
+          
+          BIN_PATH=$(find build -name "thru" -o -name "thru.exe" | grep -i "Release" || find build -name "thru" -o -name "thru.exe" | head -n 1)
+          
+          echo "Found binary at: $BIN_PATH"
+          cp "$BIN_PATH" dist/
+          
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            cd dist && 7z a "../thruflux-${TAG}-${{ matrix.asset_name }}" .
+          else
+            chmod +x dist/thru
+            tar -C dist -czf "thruflux-${TAG}-${{ matrix.asset_name }}" .
+          fi
+          
+          # Set the asset path for the upload step
+          echo "ASSET_PATH=thruflux-${TAG}-${{ matrix.asset_name }}" >> $GITHUB_ENV
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ env.ASSET_PATH }}
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./all_assets
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./all_assets/thruflux-*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

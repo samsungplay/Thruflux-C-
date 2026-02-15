@@ -345,7 +345,7 @@ namespace receiver {
                                     indicators::option::ForegroundColor{indicators::Color::red});
                                 progressBar->mark_as_completed();
                                 spdlog::error(
-                                    "Integrity check FAILED due to file hash mismatch (fileId={} offset={} len={}). Likely due to disk corruption. Please try again!",
+                                    "Integrity check FAILED due to file hash mismatch (fileId={} offset={} len={}. Please try again!",
                                     ctx->fileId, ctx->chunkOffset, ctx->chunkLength
                                 );
                                 connCtx->deleteResumeBitmap();

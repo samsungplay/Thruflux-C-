@@ -12,7 +12,7 @@ namespace common {
     public:
         //run some task on the main thread
         static void postTask(std::function<void()> task) {
-            auto *taskPtr = new std::function<void()>(std::move(task));
+            auto *taskPtr = new std::function(std::move(task));
 
             g_main_context_invoke_full(
                 context_,
