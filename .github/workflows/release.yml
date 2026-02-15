@@ -38,7 +38,6 @@ jobs:
                 elif [ "${{ runner.os }}" = "macOS" ]; then
                   brew install nasm
                 elif [ "${{ runner.os }}" = "Windows" ]; then
-                  # vcpkg usually handles nasm on Windows, but if not:
                   choco install nasm
                 fi
 
@@ -54,7 +53,6 @@ jobs:
       - name: Configure CMake
         shell: bash
         run: |
-          # Use VCPKG_INSTALLATION_ROOT (standard GH env var)
           cmake -S . -B build \
             -DCMAKE_TOOLCHAIN_FILE="${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
@@ -82,7 +80,6 @@ jobs:
             tar -C dist -czf "thruflux-${TAG}-${{ matrix.asset_name }}" .
           fi
           
-          # Set the asset path for the upload step
           echo "ASSET_PATH=thruflux-${TAG}-${{ matrix.asset_name }}" >> $GITHUB_ENV
 
       - name: Upload Build Artifact

@@ -1,5 +1,3 @@
 {
-  "overlay-ports": [
-    "./dependency-overlay"
-  ]
+
 }
