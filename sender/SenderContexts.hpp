@@ -53,9 +53,15 @@ namespace sender {
         const size_t MAX_MMAPS = 16;
         std::list<std::unique_ptr<indicators::ProgressBar> > progressBarsStorage;
         indicators::DynamicProgress<indicators::ProgressBar> progressBars;
+
+        SenderPersistentContext() {
+            progressBars.set_option(indicators::option::HideBarWhenComplete(true));
+        }
+
         std::vector<uint64_t> fileChunkBase;
         uint64_t totalChunks = 0;
         std::atomic<int> receiversCount{0};
+
 
         void buildManifest(const std::vector<std::string> &paths) {
             files.clear();

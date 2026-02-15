@@ -13,83 +13,83 @@ namespace sender {
     class SenderStream : public common::Stream {
         //unlike receiver, sender's progress reporter should run persistently
         static void watchProgress() {
-            // g_timeout_add_full(
-            //     G_PRIORITY_HIGH,
-            //     1000,
-            //     [](gpointer) -> gboolean {
-            //         const auto now = std::chrono::steady_clock::now();
-            //         const double totalBytes = static_cast<double>(senderPersistentContext.totalExpectedBytes);
-            //
-            //         for (const auto &context: connectionContexts_) {
-            //             if (!context || !context->started || context->complete) continue;
-            //
-            //             auto &progressBar = senderPersistentContext.progressBars[static_cast<SenderConnectionContext *>(
-            //                 context)->progressBarIndex];
-            //
-            //             if (context->lastTime.time_since_epoch().count() == 0) {
-            //                 context->lastTime = now;
-            //                 context->lastBytesMoved = context->bytesMoved;
-            //                 progressBar.set_option(
-            //                     indicators::option::PostfixText{"starting..."});
-            //                 progressBar.set_progress(0);
-            //                 continue;
-            //             }
-            //
-            //             const double elapsedSeconds =
-            //                     std::chrono::duration<double>(now - context->startTime).count();
-            //             const double deltaSeconds =
-            //                     std::chrono::duration<double>(now - context->lastTime).count();
-            //
-            //             const double safeDelta = (deltaSeconds > 1e-6) ? deltaSeconds : 1e-6;
-            //             const double safeElapsed = (elapsedSeconds > 1e-6) ? elapsedSeconds : 1e-6;
-            //
-            //             const double bytesMoved = static_cast<double>(context->bytesMoved);
-            //             const double lastBytesMoved = static_cast<double>(context->lastBytesMoved);
-            //
-            //             const double instantThroughput = (bytesMoved - lastBytesMoved) / safeDelta;
-            //             const double averageThroughput = bytesMoved / safeElapsed;
-            //
-            //             const double ewmaThroughput =
-            //                     (context->ewmaThroughput == 0.0)
-            //                         ? instantThroughput
-            //                         : 0.2 * instantThroughput + 0.8 * context->ewmaThroughput;
-            //
-            //             context->ewmaThroughput = ewmaThroughput;
-            //
-            //             const double percent = (totalBytes <= 0.0)
-            //                                        ? 0.0
-            //                                        : (static_cast<SenderConnectionContext *>(
-            //                                               context)->logicalBytesMoved / totalBytes) * 100.0;
-            //             int p = static_cast<int>(std::lround(percent));
-            //             if (p < 0) p = 0;
-            //             if (p > 100) p = 100;
-            //
-            //             std::string postfix;
-            //             postfix.reserve(256);
-            //             postfix += common::Utils::sizeToReadableFormat(ewmaThroughput);
-            //             postfix += "/s sent ";
-            //             postfix += common::Utils::sizeToReadableFormat(context->bytesMoved);
-            //             postfix += " resumed ";
-            //             postfix += common::Utils::sizeToReadableFormat(context->skippedBytes);
-            //             postfix += " files ";
-            //             postfix += std::to_string(context->filesMoved);
-            //             postfix += "/";
-            //             postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);
-            //             postfix += " ";
-            //             postfix += context->connectionType == common::ConnectionContext::RELAYED ? "relayed" : "direct";
-            //
-            //             progressBar.set_option(indicators::option::PostfixText{postfix});
-            //             progressBar.set_progress(p);
-            //
-            //             context->lastTime = now;
-            //             context->lastBytesMoved = context->bytesMoved;
-            //         }
-            //
-            //         return G_SOURCE_CONTINUE;
-            //     },
-            //     nullptr,
-            //     nullptr
-            // );
+            g_timeout_add_full(
+                G_PRIORITY_HIGH,
+                1000,
+                [](gpointer) -> gboolean {
+                    const auto now = std::chrono::steady_clock::now();
+                    const double totalBytes = static_cast<double>(senderPersistentContext.totalExpectedBytes);
+
+                    for (const auto &context: connectionContexts_) {
+                        if (!context || !context->started || context->complete) continue;
+
+                        auto &progressBar = senderPersistentContext.progressBars[static_cast<SenderConnectionContext *>(
+                            context)->progressBarIndex];
+
+                        if (context->lastTime.time_since_epoch().count() == 0) {
+                            context->lastTime = now;
+                            context->lastBytesMoved = context->bytesMoved;
+                            progressBar.set_option(
+                                indicators::option::PostfixText{"starting..."});
+                            progressBar.set_progress(0);
+                            continue;
+                        }
+
+                        const double elapsedSeconds =
+                                std::chrono::duration<double>(now - context->startTime).count();
+                        const double deltaSeconds =
+                                std::chrono::duration<double>(now - context->lastTime).count();
+
+                        const double safeDelta = (deltaSeconds > 1e-6) ? deltaSeconds : 1e-6;
+                        const double safeElapsed = (elapsedSeconds > 1e-6) ? elapsedSeconds : 1e-6;
+
+                        const double bytesMoved = static_cast<double>(context->bytesMoved);
+                        const double lastBytesMoved = static_cast<double>(context->lastBytesMoved);
+
+                        const double instantThroughput = (bytesMoved - lastBytesMoved) / safeDelta;
+                        const double averageThroughput = bytesMoved / safeElapsed;
+
+                        const double ewmaThroughput =
+                                (context->ewmaThroughput == 0.0)
+                                    ? instantThroughput
+                                    : 0.2 * instantThroughput + 0.8 * context->ewmaThroughput;
+
+                        context->ewmaThroughput = ewmaThroughput;
+
+                        const double percent = (totalBytes <= 0.0)
+                                                   ? 0.0
+                                                   : (static_cast<SenderConnectionContext *>(
+                                                          context)->logicalBytesMoved / totalBytes) * 100.0;
+                        int p = static_cast<int>(std::lround(percent));
+                        if (p < 0) p = 0;
+                        if (p > 100) p = 100;
+
+                        std::string postfix;
+                        postfix.reserve(256);
+                        postfix += common::Utils::sizeToReadableFormat(ewmaThroughput);
+                        postfix += "/s sent ";
+                        postfix += common::Utils::sizeToReadableFormat(context->bytesMoved);
+                        postfix += " resumed ";
+                        postfix += common::Utils::sizeToReadableFormat(context->skippedBytes);
+                        postfix += " files ";
+                        postfix += std::to_string(context->filesMoved);
+                        postfix += "/";
+                        postfix += std::to_string(senderPersistentContext.totalExpectedFilesCount);
+                        postfix += " ";
+                        postfix += context->connectionType == common::ConnectionContext::RELAYED ? "relayed" : "direct";
+
+                        progressBar.set_option(indicators::option::PostfixText{postfix});
+                        progressBar.set_progress(p);
+
+                        context->lastTime = now;
+                        context->lastBytesMoved = context->bytesMoved;
+                    }
+
+                    return G_SOURCE_CONTINUE;
+                },
+                nullptr,
+                nullptr
+            );
         }
 
         inline static lsquic_stream_if streamCallbacks = {
