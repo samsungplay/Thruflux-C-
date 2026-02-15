@@ -11,7 +11,7 @@ namespace sender {
     public:
         inline static std::vector<std::string> paths;
 
-        inline static std::string serverUrl = "https://bytepipe.app:8080";
+        inline static std::string serverUrl = "https://bytepipe.app";
         inline static int maxReceivers = 10;
 
         inline static std::string stunServer = "stun://stun.cloudflare.com:3478";
