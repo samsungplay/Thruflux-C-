@@ -17,7 +17,7 @@
 namespace receiver {
     class ReceiverStream : public common::Stream {
         static void watchProgress() {
-            g_timeout_add_full(G_PRIORITY_HIGH, 500, [](gpointer data)-> gboolean {
+            g_timeout_add_full(G_PRIORITY_HIGH, 1000, [](gpointer data)-> gboolean {
                 if (connectionContexts_.empty()) {
                     return G_SOURCE_CONTINUE;
                 }
