@@ -205,7 +205,7 @@ namespace receiver {
             const auto now = std::chrono::steady_clock::now();
             const bool timeOk =
                     (lastResumeBitmapFlush.time_since_epoch().count() == 0) ||
-                    (std::chrono::duration<double>(now - lastResumeBitmapFlush).count() >= 100.0);
+                    (std::chrono::duration<double>(now - lastResumeBitmapFlush).count() >= 5.0);
 
             if (!force && !timeOk) return;
 
