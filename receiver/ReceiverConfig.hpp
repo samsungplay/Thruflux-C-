@@ -10,7 +10,7 @@ namespace receiver {
     public:
         inline static std::string joinCode;
         inline static std::string out = ".";
-        inline static std::string serverUrl = "http://localhost:8080";
+        inline static std::string serverUrl = "https://stun.bytepipe.app:8080";
 
         inline static std::string stunServers = "stun://stun.cloudflare.com:3478";
         inline static std::string turnServers;
@@ -26,8 +26,7 @@ namespace receiver {
 
         inline static int udpBufferBytes = 8 * 1024 * 1024;
 
-        static void initialize(int argc, char **argv) {
-            CLI::App app{"Thruflux Receiver"};
+        static void initialize(CLI::App* app) {
 
             const auto isHttpUrl = CLI::Validator(
                 [](const std::string &s) -> std::string {
@@ -69,58 +68,58 @@ namespace receiver {
             constexpr std::int64_t MiB = 1024 * KiB;
             constexpr std::int64_t GiB = 1024 * MiB;
 
-            app.add_option("JOIN_CODE", joinCode, "Join code for the transfer")
+            app->add_option("JOIN_CODE", joinCode, "Join code for the transfer")
                     ->required();
 
-            app.add_option("--out", out, "Output directory")
+            app->add_option("--out", out, "Output directory")
                     ->check(CLI::ExistingDirectory)
                     ->capture_default_str();
 
-            app.add_option("--server-url", serverUrl, "HTTP(S) URL of signaling server")
+            app->add_option("--server-url", serverUrl, "HTTP(S) URL of signaling server")
                     ->check(isHttpUrl)
                     ->capture_default_str();
 
-            app.add_option("--stun-server", stunServers, "STUN server URL")
+            app->add_option("--stun-server", stunServers, "STUN server URL")
                     ->check(isStunUrl)
                     ->capture_default_str();
 
-            app.add_option("--turn-server", turnServers,
+            app->add_option("--turn-server", turnServers,
                            "TURN server URL (optional). Example: turn://user:pass@turn.example.com:3478")
                     ->check(isTurnUrl);
 
-            app.add_flag("--force-turn", forceTurn, "Force TURN relay");
+            app->add_flag("--force-turn", forceTurn, "Force TURN relay");
 
-            app.add_option("--quic-conn-window-bytes", quicConnWindowBytes,
+            app->add_option("--quic-conn-window-bytes", quicConnWindowBytes,
                            "Initial QUIC connection flow-control window (bytes)")
                     ->check(CLI::Range(1 * MiB, 8 * GiB))
                     ->capture_default_str();
 
-            app.add_option("--quic-stream-window-bytes", quicStreamWindowBytes,
+            app->add_option("--quic-stream-window-bytes", quicStreamWindowBytes,
                            "Initial QUIC stream flow-control window (bytes)")
                     ->check(CLI::Range(256 * KiB, 2 * GiB))
                     ->capture_default_str();
 
-            app.add_option("--quic-max-streams", quicMaxStreams,
+            app->add_option("--quic-max-streams", quicMaxStreams,
                            "Max QUIC streams allowed")
                     ->check(CLI::Range(1, 100000))
                     ->capture_default_str();
 
-            app.add_option("--total-streams", totalStreams,
+            app->add_option("--total-streams", totalStreams,
                            "Concurrent data streams to open. Increasing this does not necessarily accelerate transfers.")
                     ->check(CLI::Range(1, 1024))
                     ->capture_default_str();
 
 
-            app.add_flag("--overwrite", overwrite, "Overwrite existing files (disable resume)");
+            app->add_flag("--overwrite", overwrite, "Overwrite existing files (disable resume)");
 
-            app.add_option("--udp-buffer-bytes", udpBufferBytes,
+            app->add_option("--udp-buffer-bytes", udpBufferBytes,
                            "UDP socket buffer size (bytes)")
                     ->check(CLI::Range(256 * 1024, 256 * 1024 * 1024))
                     ->capture_default_str();
 
-            app.set_version_flag("--version", "Thruflux v0.3.0");
+            app->set_version_flag("--version", "Thruflux v0.3.0");
 
-            app.parse_complete_callback([&]() {
+            app->parse_complete_callback([&]() {
                 if (forceTurn && turnServers.empty()) {
                     throw CLI::ValidationError("--force-turn",
                                                "requires --turn-server to be set");
@@ -141,11 +140,6 @@ namespace receiver {
                 }
             });
 
-            try {
-                app.parse(argc, argv);
-            } catch (const CLI::ParseError &e) {
-                std::exit(app.exit(e));
-            }
         }
     };
 }

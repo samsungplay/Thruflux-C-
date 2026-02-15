@@ -13,7 +13,7 @@
 namespace common {
     inline constexpr char RECEIVER_MANIFEST_RECEIVED_ACK = 0x06;
     inline constexpr char RECEIVER_TRANSFER_COMPLETE_ACK = 0x07;
-    inline static constexpr uint64_t CHUNK_SIZE = 1 * 1024 * 1024; //controls resume granularity & scheduling
+    inline static constexpr uint64_t CHUNK_SIZE = 4 * 1024 * 1024; //controls resume granularity & scheduling
 
     struct FileHandleCache {
         struct Entry {
@@ -23,7 +23,7 @@ namespace common {
 
         std::unordered_map<uint32_t, Entry> openFiles;
         std::unordered_map<uint32_t, std::string> paths;
-        const size_t MAX_FDS = 64;
+        const size_t MAX_FDS = 128;
         uint64_t accessCounter = 0;
 
         void registerPath(uint32_t id, const std::string &p) {

@@ -6,7 +6,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 project(Thruflux_C__)
 
-
 find_package(CLI11 CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(unofficial-uwebsockets CONFIG REQUIRED)
@@ -20,7 +19,6 @@ find_package(indicators CONFIG REQUIRED)
 find_package(blake3 CONFIG REQUIRED)
 pkg_check_modules(NICE REQUIRED IMPORTED_TARGET nice)
 
-
 set(COMMON_SOURCES
         common/Utils.hpp
         common/Payloads.hpp
@@ -30,36 +28,34 @@ set(COMMON_SOURCES
         common/ThreadManager.hpp
         common/Contexts.hpp
         common/Stream.hpp
+        app/Main.cpp
 )
 
-add_executable(ThrufluxServer
-        server/ServerEntryPoint.cpp
+add_executable(thru
+        app/Main.cpp
+
         server/ServerConfig.hpp
         server/ServerSocketHandler.hpp
         server/TransferSession.hpp
         server/TransferSessionStore.hpp
         server/SessionTracker.hpp
-        ${COMMON_SOURCES}
-)
+        server/ServerEntryPoint.hpp
 
-add_executable(ThrufluxSender
-        sender/SenderEntryPoint.cpp
         sender/SenderConfig.hpp
         sender/SenderSocketHandler.hpp
-        ${COMMON_SOURCES}
         sender/SenderStream.hpp
-)
+        sender/SenderEntryPoint.hpp
 
-add_executable(ThrufluxReceiver
         receiver/ReceiverConfig.hpp
-        ${COMMON_SOURCES}
-        receiver/ReceiverEntryPoint.cpp
         receiver/ReceiverSocketHandler.hpp
         receiver/ReceiverStream.hpp
         receiver/ReceiverContexts.hpp
+        receiver/ReceiverEntryPoint.hpp
+
+        ${COMMON_SOURCES}
 )
 
-set(SHARED_LIBS
+target_link_libraries(thru PRIVATE
         CLI11::CLI11
         spdlog::spdlog
         nlohmann_json::nlohmann_json
@@ -68,14 +64,8 @@ set(SHARED_LIBS
         OpenSSL::Crypto
         PkgConfig::NICE
         indicators::indicators
-)
-
-set(SENDER_RECEIVER_SHARED_LIBS
         ixwebsocket::ixwebsocket
         lsquic::lsquic
         BLAKE3::blake3
+        unofficial::uwebsockets::uwebsockets
 )
-
-target_link_libraries(ThrufluxServer PRIVATE ${SHARED_LIBS} unofficial::uwebsockets::uwebsockets)
-target_link_libraries(ThrufluxSender PRIVATE ${SHARED_LIBS} ${SENDER_RECEIVER_SHARED_LIBS})
-target_link_libraries(ThrufluxReceiver PRIVATE ${SHARED_LIBS} ${SENDER_RECEIVER_SHARED_LIBS})
