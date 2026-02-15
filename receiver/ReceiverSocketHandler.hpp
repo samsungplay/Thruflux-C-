@@ -42,7 +42,7 @@ namespace receiver {
                             }
 
 
-                            common::IceHandler::gatherLocalCandidates(false, "", ReceiverConfig::totalConnections,
+                            common::IceHandler::gatherLocalCandidates(false, "",1,
                                                                       [&socket](common::CandidatesResult result) {
                                                                           socket.send(nlohmann::json(
                                                                               common::JoinTransferSessionPayload{

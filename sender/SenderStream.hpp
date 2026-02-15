@@ -277,13 +277,13 @@ namespace sender {
 
                 while (true) {
                     if (ctx->sendingHeader) {
-                        size_t remaining = 16 - ctx->headerSent;
+                        size_t remaining = 48 - ctx->headerSent;
                         ssize_t nw = lsquic_stream_write(stream, ctx->headerBuf + ctx->headerSent, remaining);
                         if (nw <= 0) {
                             return;
                         }
                         ctx->headerSent += nw;
-                        if (ctx->headerSent == 16) {
+                        if (ctx->headerSent == 48) {
                             ctx->sendingHeader = false;
                         } else {
                             return;
@@ -345,8 +345,8 @@ namespace sender {
             settings.es_versions = (1 << LSQVER_I001);
             settings.es_cc_algo = 2;
             settings.es_init_max_data = SenderConfig::quicConnWindowBytes;
-            settings.es_init_max_streams_uni = SenderConfig::quicMaxIncomingStreams;
-            settings.es_init_max_streams_bidi = SenderConfig::quicMaxIncomingStreams;
+            settings.es_init_max_streams_uni = SenderConfig::quicMaxStreams;
+            settings.es_init_max_streams_bidi = SenderConfig::quicMaxStreams;
             settings.es_idle_conn_to = 15000000;
             settings.es_init_max_stream_data_uni = SenderConfig::quicStreamWindowBytes;
             settings.es_init_max_stream_data_bidi_local = SenderConfig::quicStreamWindowBytes;

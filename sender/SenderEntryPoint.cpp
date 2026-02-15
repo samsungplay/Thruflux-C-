@@ -5,7 +5,6 @@
 
 #include "SenderSocketHandler.hpp"
 #include "../common/Utils.hpp"
-#include <latch>
 #include <boost/algorithm/string.hpp>
 
 #include "SenderStream.hpp"
@@ -17,7 +16,7 @@ int main(const int argc, char **argv) {
     sender::SenderConfig::initialize(argc, argv);
 
     std::vector<std::string> rawStunUrls;
-    boost::split(rawStunUrls, sender::SenderConfig::stunServers, boost::is_any_of(","), boost::token_compress_on);
+    boost::split(rawStunUrls, sender::SenderConfig::stunServer, boost::is_any_of(","), boost::token_compress_on);
 
     for (const auto &rawStunUrl: rawStunUrls) {
         if (auto stunServer = common::Utils::toStunServer(rawStunUrl); stunServer.has_value()) {

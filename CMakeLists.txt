@@ -17,6 +17,7 @@ find_package(Boost REQUIRED COMPONENTS url)
 find_package(PkgConfig REQUIRED)
 find_package(lsquic CONFIG REQUIRED)
 find_package(indicators CONFIG REQUIRED)
+find_package(blake3 CONFIG REQUIRED)
 pkg_check_modules(NICE REQUIRED IMPORTED_TARGET nice)
 
 
@@ -72,6 +73,7 @@ set(SHARED_LIBS
 set(SENDER_RECEIVER_SHARED_LIBS
         ixwebsocket::ixwebsocket
         lsquic::lsquic
+        BLAKE3::blake3
 )
 
 target_link_libraries(ThrufluxServer PRIVATE ${SHARED_LIBS} unofficial::uwebsockets::uwebsockets)

@@ -5,6 +5,8 @@
 #include <boost/asio/execution/bad_executor.hpp>
 
 #include "ThreadManager.hpp"
+#include "../sender/SenderConfig.hpp"
+#include "../receiver/ReceiverConfig.hpp"
 
 extern "C" {
 #include <agent.h>
@@ -70,7 +72,9 @@ namespace common {
         static void dispose(const std::string &receiverId) {
             if (const auto it = agentsMap_.find(receiverId); it != agentsMap_.end()) {
                 NiceAgent *agent = it->second.agent;
-                g_signal_handlers_disconnect_matched(agent, static_cast<GSignalMatchType>(G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA | G_SIGNAL_MATCH_ID), 0, 0, nullptr, nullptr, nullptr);
+                g_signal_handlers_disconnect_matched(
+                    agent, static_cast<GSignalMatchType>(G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA | G_SIGNAL_MATCH_ID),
+                    0, 0, nullptr, nullptr, nullptr);
                 nice_agent_remove_stream(agent, it->second.streamId);
                 g_object_unref(agent);
                 agentsMap_.erase(it);
@@ -99,6 +103,7 @@ namespace common {
                                           const CandidatesCallback callback
         ) {
             NiceAgent *agent = nice_agent_new(ThreadManager::getContext(), NICE_COMPATIBILITY_RFC5245);
+
 
             g_object_set(agent, "controlling-mode", isSender, NULL);
 
@@ -133,7 +138,7 @@ namespace common {
                 }
             }
 
-            const auto onGatheringDoneCallback = [n, agent, stream_id, callback = std::move(callback)]() {
+            const auto onGatheringDoneCallback = [isSender, n, agent, stream_id, callback = std::move(callback)]() {
                 auto serializedCandidates = nlohmann::json::array();
                 gchar *ufrag = nullptr;
                 gchar *password = nullptr;
@@ -146,6 +151,12 @@ namespace common {
 
                         if (candidate->transport != NICE_CANDIDATE_TRANSPORT_UDP) {
                             continue;
+                        }
+                        if ((isSender && sender::SenderConfig::forceTurn) || (
+                                !isSender && receiver::ReceiverConfig::forceTurn)) {
+                            if (candidate->type != NICE_CANDIDATE_TYPE_RELAYED) {
+                                continue;
+                            }
                         }
                         if (gchar *cand_str = nice_agent_generate_local_candidate_sdp(agent, candidate)) {
                             serializedCandidates.push_back({

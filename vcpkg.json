@@ -233,5 +233,8 @@
   }, {
     "name" : "indicators",
     "version>=" : "2.3"
+  }, {
+    "name" : "blake3",
+    "version>=" : "1.8.3"
   } ]
 }

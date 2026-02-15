@@ -124,11 +124,9 @@ namespace server {
                 }
                 else if (isSender && type == "reject_transfer_session_payload") {
                     auto payload = j.get<common::RejectTransferSessionPayload>();
-                    const auto transferSession = TransferSessionStore::instance().getTransferSession(session->getUserData()->id);
-                    if (transferSession.has_value()) {
-                        if (const auto receiverSession = transferSession.value()->getReceiver(payload.receiverId)) {
-                            receiverSession->end(4000, payload.reason);
-                        }
+                    const auto receiverSession = sessionTracker[payload.receiverId];
+                    if (receiverSession) {
+                        receiverSession->end(4000, payload.reason);
                     }
                 }
             } catch (const std::exception &e) {

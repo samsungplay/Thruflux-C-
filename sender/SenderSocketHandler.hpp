@@ -65,14 +65,14 @@ namespace sender {
                         socket.send(nlohmann::json(common::RejectTransferSessionPayload{
                             .receiverId = joinTransferSessionPayload.receiverId,
                             .reason = "Sender does not accept any more receivers",
-                        }));
+                        }).dump());
                         return;
                     }
 
                     common::ThreadManager::postTask(
                         [&socket,joinTransferSessionPayload = std::move(joinTransferSessionPayload)]() {
                             auto &receiverId = joinTransferSessionPayload.receiverId;
-                            common::IceHandler::gatherLocalCandidates(true, receiverId, SenderConfig::totalConnections,
+                            common::IceHandler::gatherLocalCandidates(true, receiverId, 1,
                                                                       [&socket, receiverId = std::move(receiverId),
                                                                           payload = std::move(
                                                                               joinTransferSessionPayload)](

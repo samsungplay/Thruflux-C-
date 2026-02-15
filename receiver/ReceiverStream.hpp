@@ -80,7 +80,9 @@ namespace receiver {
                 postfix += "/";
                 postfix += std::to_string(receiverConnectionContext->totalExpectedFilesCount);
                 postfix += " ";
-                   postfix += receiverConnectionContext->connectionType == common::ConnectionContext::RELAYED ? "relayed" : "direct";
+                postfix += receiverConnectionContext->connectionType == common::ConnectionContext::RELAYED
+                               ? "relayed"
+                               : "direct";
                 receiverConnectionContext->progressBar->set_option(indicators::option::PostfixText{postfix});
                 receiverConnectionContext->progressBar->set_progress(p);;
                 receiverConnectionContext->lastTime = now;
@@ -182,6 +184,7 @@ namespace receiver {
                         progressBar->set_option(indicators::option::PostfixText(postfix));
                         progressBar->set_option(
                             indicators::option::ForegroundColor{indicators::Color::red});
+                        progressBar->mark_as_completed();
                         ctx->maybeSaveBitmap(true);
                     }
                     ctx->connection = nullptr;
@@ -225,7 +228,8 @@ namespace receiver {
                             connCtx->manifestBuf.insert(connCtx->manifestBuf.end(), tmp, tmp + nr);
                             std::string postfix;
                             postfix.reserve(64);
-                            postfix += common::Utils::sizeToReadableFormat(static_cast<double>(connCtx->manifestBuf.size()));
+                            postfix += common::Utils::sizeToReadableFormat(
+                                static_cast<double>(connCtx->manifestBuf.size()));
                             postfix += " received";
                             connCtx->manifestProgressBar.set_option(indicators::option::PostfixText(postfix));
                             const auto now = std::chrono::steady_clock::now();
@@ -233,12 +237,11 @@ namespace receiver {
                                 connCtx->manifestProgressBar.print_progress();
                                 connCtx->lastManifestProgressPrint = now;
                             }
-
                         }
                         if (nr == 0) {
                             std::string postfix;
                             postfix.reserve(64);
-                            postfix += common::Utils::sizeToReadableFormat((double)connCtx->manifestBuf.size());
+                            postfix += common::Utils::sizeToReadableFormat((double) connCtx->manifestBuf.size());
                             postfix += " received";
                             connCtx->manifestProgressBar.set_option(indicators::option::PostfixText(postfix));
                             connCtx->manifestProgressBar.mark_as_completed();
@@ -254,8 +257,7 @@ namespace receiver {
                         }
                         if (nr < 0 && errno != 35) {
                             spdlog::error("Error while reading manifest stream {}",errno);
-                        }
-                        else if (nr < 0) {
+                        } else if (nr < 0) {
                             break;
                         }
                     }
@@ -264,7 +266,7 @@ namespace receiver {
 
                 while (true) {
                     if (ctx->readingHeader) {
-                        size_t remaining = 16 - ctx->headerBytesRead;
+                        size_t remaining = 48 - ctx->headerBytesRead;
                         ssize_t nr = lsquic_stream_read(stream, ctx->headerBuf + ctx->headerBytesRead, remaining);
                         if (nr <= 0) {
                             return;
@@ -273,13 +275,15 @@ namespace receiver {
                         ctx->headerBytesRead += nr;
 
 
-                        if (ctx->headerBytesRead == 16) {
+                        if (ctx->headerBytesRead == 48) {
                             memcpy(&ctx->chunkOffset, ctx->headerBuf, 8);
                             memcpy(&ctx->chunkLength, ctx->headerBuf + 8, 4);
                             memcpy(&ctx->fileId, ctx->headerBuf + 12, 4);
+                            memcpy(ctx->expectedHash, ctx->headerBuf + 16, 32);
 
                             ctx->readingHeader = false;
                             ctx->bodyBytesRead = 0;
+                            ctx->hasherInitialized = false;
                         } else {
                             return;
                         }
@@ -290,6 +294,13 @@ namespace receiver {
                         if (nr <= 0) {
                             break;
                         }
+                        if (!ctx->hasherInitialized) {
+                            blake3_hasher_init(&ctx->hasher);
+                            ctx->hasherInitialized = true;
+                        }
+
+                        blake3_hasher_update(&ctx->hasher, ctx->writeBuffer, static_cast<size_t>(nr));
+
 
                         const int fd = connCtx->cache.get(ctx->fileId, O_WRONLY | O_CREAT, 0644);
                         if (fd == -1) {
@@ -311,6 +322,36 @@ namespace receiver {
                         ctx->bodyBytesRead += nw;
 
                         if (ctx->bodyBytesRead >= ctx->chunkLength) {
+                            uint8_t hashResult[32];
+                            blake3_hasher_finalize(&ctx->hasher, hashResult, 32);
+
+                            if (memcmp(hashResult, ctx->expectedHash, 32) != 0) {
+                                const auto &progressBar = connCtx->progressBar;
+                                std::string postfix;
+                                postfix.reserve(256);
+                                postfix += " received ";
+                                postfix += common::Utils::sizeToReadableFormat(connCtx->bytesMoved);
+                                postfix += " resumed ";
+                                postfix += common::Utils::sizeToReadableFormat(connCtx->skippedBytes);
+                                postfix += " files ";
+                                postfix += std::to_string(connCtx->filesMoved);
+                                postfix += "/";
+                                postfix += std::to_string(connCtx->totalExpectedFilesCount);
+                                postfix += " ";
+                                postfix += connCtx->connectionType == common::ConnectionContext::RELAYED ? "relayed" : "direct";
+                                postfix += " [FAILED]";
+                                progressBar->set_option(indicators::option::PostfixText(postfix));
+                                progressBar->set_option(
+                                    indicators::option::ForegroundColor{indicators::Color::red});
+                                progressBar->mark_as_completed();
+                                spdlog::error(
+                                    "Integrity check FAILED due to file hash mismatch (fileId={} offset={} len={}). Likely due to disk corruption. Please try again!",
+                                    ctx->fileId, ctx->chunkOffset, ctx->chunkLength
+                                );
+                                connCtx->deleteResumeBitmap();
+                                common::ThreadManager::terminate();
+                                return;
+                            }
                             const uint64_t chunkInFile = ctx->chunkOffset / common::CHUNK_SIZE;
                             const uint64_t globalChunk = connCtx->fileChunkBase[ctx->fileId] + chunkInFile;
                             if (globalChunk < connCtx->totalChunks) {
@@ -413,8 +454,8 @@ namespace receiver {
             settings.es_versions = (1 << LSQVER_I001);
             settings.es_cc_algo = 2;
             settings.es_init_max_data = ReceiverConfig::quicConnWindowBytes;
-            settings.es_init_max_streams_uni = ReceiverConfig::quicMaxIncomingStreams;
-            settings.es_init_max_streams_bidi = ReceiverConfig::quicMaxIncomingStreams;
+            settings.es_init_max_streams_uni = ReceiverConfig::quicMaxStreams;
+            settings.es_init_max_streams_bidi = ReceiverConfig::quicMaxStreams;
             settings.es_idle_conn_to = 30000000;
             settings.es_init_max_stream_data_uni = ReceiverConfig::quicStreamWindowBytes;
             settings.es_init_max_stream_data_bidi_local = ReceiverConfig::quicStreamWindowBytes;
@@ -446,6 +487,8 @@ namespace receiver {
 
 
         static void receiveTransfer(NiceAgent *agent, const guint streamId) {
+            spdlog::info("Saving to {}", ReceiverConfig::out);
+
             setAndVerifySocketBuffers(agent, streamId, 1, ReceiverConfig::udpBufferBytes);
             NiceCandidate *local = nullptr, *remote = nullptr;
             if (!nice_agent_get_selected_pair(agent, streamId, 1, &local, &remote)) {
@@ -457,14 +500,16 @@ namespace receiver {
             ctx->agent = agent;
             ctx->streamId = streamId;
             ctx->createProgressBar("Receiving ");
-            ctx->connectionType = (local->type == NICE_CANDIDATE_TYPE_RELAYED || remote->type == NICE_CANDIDATE_TYPE_RELAYED) ? common::ConnectionContext::RELAYED : common::ConnectionContext::DIRECT;
+            ctx->connectionType = (local->type == NICE_CANDIDATE_TYPE_RELAYED || remote->type ==
+                                   NICE_CANDIDATE_TYPE_RELAYED)
+                                      ? common::ConnectionContext::RELAYED
+                                      : common::ConnectionContext::DIRECT;
             if (ctx->connectionType == common::ConnectionContext::RELAYED) {
                 ctx->progressBar->set_option(indicators::option::ForegroundColor{indicators::Color::yellow});
             }
 
             nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
             nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));
-
 
 
             connectionContexts_.push_back(ctx);
