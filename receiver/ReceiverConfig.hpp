@@ -10,7 +10,7 @@ namespace receiver {
     public:
         inline static std::string joinCode;
         inline static std::string out = ".";
-        inline static std::string serverUrl = "https://stun.bytepipe.app:8080";
+        inline static std::string serverUrl = "https://bytepipe.app:8080";
 
         inline static std::string stunServers = "stun://stun.cloudflare.com:3478";
         inline static std::string turnServers;
