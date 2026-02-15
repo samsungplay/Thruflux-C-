@@ -11,7 +11,6 @@
 #include "SenderStream.hpp"
 
 int main(const int argc, char **argv) {
-
     spdlog::set_pattern("%v");
     common::Utils::disableLibniceLogging();
 
@@ -58,6 +57,9 @@ int main(const int argc, char **argv) {
             sender::SenderSocketHandler::onMessage(socketClient, msg->str);
         } else if (msg->type == ix::WebSocketMessageType::Close) {
             sender::SenderSocketHandler::onClose(socketClient, msg->closeInfo.reason);
+        } else if (msg->type == ix::WebSocketMessageType::Error) {
+            spdlog::error("Could not connect to relay: HTTP Status: {}", msg->errorInfo.http_status);
+            spdlog::error("Error Description: {}", msg->errorInfo.reason);
         }
     });
 
