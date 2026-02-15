@@ -11,7 +11,11 @@
     "fmt",
     "glib",
     "indicators",
-    "ixwebsocket",
+    {
+      "name": "ixwebsocket",
+      "default-features": false,
+      "features": [ "mbedtls", "tls" ]
+    },
     "liblsquic",
     "libnice",
     "nlohmann-json",
