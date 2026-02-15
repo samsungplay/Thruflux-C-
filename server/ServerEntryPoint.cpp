@@ -19,7 +19,7 @@ int main(const int argc, char **argv) {
     std::atomic<int> wsConnections{0};
 
     us_timer_t *timer = us_create_timer(loop, 0, 0);
-    us_timer_set(timer, [](struct us_timer_t *t) {
+    us_timer_set(timer, [](us_timer_t *t) {
         server::TransferSessionStore::instance().cleanExpiredSessions();
     }, 5000, 5000);
 

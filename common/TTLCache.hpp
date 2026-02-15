@@ -49,14 +49,17 @@ public:
 
     std::optional<V> get(const K &key) {
         auto it = map_.find(key);
-        if (it == map_.end()) {
-            return std::nullopt;
-        }
+        if (it == map_.end()) return std::nullopt;
+
         if (it->second->expiry <= std::chrono::steady_clock::now()) {
-            expiryCallback_(it->second->value);
-            erase(key);
+            auto nodeIt = it->second;
+            V value = nodeIt->value;
+            timeline_.erase(nodeIt);
+            map_.erase(it);
+            expiryCallback_(value);
             return std::nullopt;
         }
+
         return it->second->value;
     }
 
@@ -74,10 +77,14 @@ public:
 
     void cleanExpired() {
         auto now = std::chrono::steady_clock::now();
+
         while (!timeline_.empty() && now > timeline_.front().expiry) {
-            expiryCallback_(timeline_.front().value);
-            map_.erase(timeline_.front().key);
-            timeline_.pop_front();
+            auto node = timeline_.begin();
+            K key = node->key;
+            V value = node->value;
+            timeline_.erase(node);
+            map_.erase(key);
+            expiryCallback_(value);
         }
     }
 };
