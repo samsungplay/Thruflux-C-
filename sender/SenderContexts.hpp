@@ -55,7 +55,7 @@ namespace sender {
         indicators::DynamicProgress<indicators::ProgressBar> progressBars;
 
         SenderPersistentContext() {
-            progressBars.set_option(indicators::option::HideBarWhenComplete(true));
+            progressBars.set_option(indicators::option::HideBarWhenComplete(false));
         }
 
         std::vector<uint64_t> fileChunkBase;
