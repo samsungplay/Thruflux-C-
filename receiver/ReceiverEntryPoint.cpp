@@ -63,7 +63,7 @@ int main(const int argc, char **argv) {
         }
     });
 
-    spdlog::info("Connecting to relay... {}", receiver::ReceiverConfig::serverUrl);
+    spdlog::info("Connecting to signaling server... {}", receiver::ReceiverConfig::serverUrl);
 
     socketClient.start();
 

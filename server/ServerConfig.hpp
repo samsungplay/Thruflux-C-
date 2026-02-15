@@ -37,9 +37,9 @@ namespace server {
             app.add_option("--max-ws-connections", maxWsConnections, "Max concurrent websocket connections (includes senders and receivers).")->capture_default_str();
             app.add_option("--ws-idle-timeout", wsIdleTimeout, "Max websocket idle timeout in seconds")->capture_default_str();
             app.add_option("--session-timeout", sessionTimeout, "Max lifetime of a transfer session in seconds. When expired, transfers automatically abort.")->capture_default_str();
-            app.add_option("--turn-server", turnServer);
-            app.add_option("--turn-static-auth-secret", turnStaticAuthSecret);
-            app.add_option("--turn-static-cred-ttl", turnStaticCredTtl)->capture_default_str();
+            app.add_option("--turn-server", turnServer, "Turn server that will be provided to the client, along with static auth secret if set. Used for REST-based TURN.");
+            app.add_option("--turn-static-auth-secret", turnStaticAuthSecret, "Turn static auth secret to be provided to the client, along with turn server url if set. Used for REST-based TURN.");
+            app.add_option("--turn-static-cred-ttl", turnStaticCredTtl, "Turn static auth secret credentials lifetime in seconds. Used for REST-based TURN.")->capture_default_str();
             app.set_version_flag("--version", "Thruflux Server v0.3.0");
             try {
                 app.parse(argc, argv);

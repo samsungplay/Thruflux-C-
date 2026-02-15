@@ -36,8 +36,8 @@ public:
             ->required()
             ->check(CLI::ExistingPath);
 
-        app.add_option("--server-url", serverUrl)->capture_default_str();
-        app.add_option("--max-receivers", maxReceivers)->capture_default_str();
+        app.add_option("--server-url", serverUrl, "HTTP address of signaling server to connect to")->capture_default_str();
+        app.add_option("--max-receivers", maxReceivers, "Max concurrent receivers to accept")->capture_default_str();
         app.add_option("--stun-server", stunServers)->capture_default_str();
         app.add_option("--turn-server", turnServers);
         app.add_flag("--test-turn", testTurn);

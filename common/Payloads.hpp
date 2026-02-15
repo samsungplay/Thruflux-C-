@@ -7,6 +7,14 @@
 
 namespace common {
 
+    struct RejectTransferSessionPayload {
+        std::string type = "reject_transfer_session_payload";
+        std::string receiverId;
+        std::string reason;
+    };
+
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(RejectTransferSessionPayload, type, receiverId, reason);
+
     struct AcknowledgeTransferSessionPayload {
         std::string type = "acknowledge_transfer_session_payload";
         std::string receiverId;

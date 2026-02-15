@@ -15,11 +15,11 @@ namespace sender {
     class SenderSocketHandler {
     public:
         static void onConnect(ix::WebSocket &socket) {
-            spdlog::info("Relay connected: {}", SenderConfig::serverUrl);
+            spdlog::info("Signaling Server Cnnected: {}", SenderConfig::serverUrl);
         }
 
         static void onClose(ix::WebSocket &socket, std::string_view reason) {
-            spdlog::info("Relay disconnected: {} Reason: {}", SenderConfig::serverUrl, reason);
+            spdlog::info("Signaling Server Disconnected: {} Reason: {}", SenderConfig::serverUrl, reason);
             common::ThreadManager::terminate();
         }
 
@@ -61,6 +61,14 @@ namespace sender {
                     });
                 } else if (type == "join_transfer_session_payload") {
                     const auto joinTransferSessionPayload = j.get<common::JoinTransferSessionPayload>();
+                    if (senderPersistentContext.receiversCount >= SenderConfig::maxReceivers) {
+                        socket.send(nlohmann::json(common::RejectTransferSessionPayload{
+                            .receiverId = joinTransferSessionPayload.receiverId,
+                            .reason = "Sender does not accept any more receivers",
+                        }));
+                        return;
+                    }
+
                     common::ThreadManager::postTask(
                         [&socket,joinTransferSessionPayload = std::move(joinTransferSessionPayload)]() {
                             auto &receiverId = joinTransferSessionPayload.receiverId;
@@ -80,6 +88,7 @@ namespace sender {
                                                                           guint streamId,
                                                                           const int n) {
                                                                                   if (success) {
+                                                                                      senderPersistentContext.receiversCount.fetch_add(1);
                                                                                       socket.send(nlohmann::json(
                                                                                           common::AcceptTransferSessionPayload
                                                                                           {
@@ -95,6 +104,7 @@ namespace sender {
                     const auto quitTransferSessionPayload = j.get<common::QuitTransferSessionPayload>();
                     common::ThreadManager::postTask(
                         [quitTransferSessionPayload = std::move(quitTransferSessionPayload)]() {
+                            senderPersistentContext.receiversCount.fetch_sub(1);
                             auto &receiverId = quitTransferSessionPayload.receiverId;
                             SenderStream::disposeReceiverConnection(receiverId);
                             common::IceHandler::dispose(receiverId);

@@ -116,11 +116,19 @@ namespace server {
                     const auto transferSession = TransferSessionStore::instance().getTransferSessionByReceiverId(
                         session->getUserData()->id);
                     if (transferSession.has_value()) {
-                        //TODO: pickup from here
                         payload.receiverId = session->getUserData()->id;
                         transferSession.value()->senderSession()->send(nlohmann::json(payload).dump());
                     } else {
                         session->end(4004, "No Session Found While Acknowledging");
+                    }
+                }
+                else if (isSender && type == "reject_transfer_session_payload") {
+                    auto payload = j.get<common::RejectTransferSessionPayload>();
+                    const auto transferSession = TransferSessionStore::instance().getTransferSession(session->getUserData()->id);
+                    if (transferSession.has_value()) {
+                        if (const auto receiverSession = transferSession.value()->getReceiver(payload.receiverId)) {
+                            receiverSession->end(4000, payload.reason);
+                        }
                     }
                 }
             } catch (const std::exception &e) {

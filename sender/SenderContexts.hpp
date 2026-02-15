@@ -54,6 +54,7 @@ namespace sender {
         indicators::DynamicProgress<indicators::ProgressBar> progressBars;
         std::vector<uint64_t> fileChunkBase;
         uint64_t totalChunks = 0;
+        std::atomic<int> receiversCount{0};
 
         void buildManifest(const std::vector<std::string> &paths) {
             files.clear();
