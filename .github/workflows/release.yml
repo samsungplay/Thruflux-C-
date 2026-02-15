@@ -30,6 +30,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Get Latest CMake
+        uses: lukka/get-cmake@latest
+
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
