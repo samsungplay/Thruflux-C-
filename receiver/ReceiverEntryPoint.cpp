@@ -59,6 +59,7 @@ int main(const int argc, char **argv) {
         else if (msg->type == ix::WebSocketMessageType::Error) {
             spdlog::error("Could not connect to relay: HTTP Status: {}", msg->errorInfo.http_status);
             spdlog::error("Error Description: {}", msg->errorInfo.reason);
+            common::ThreadManager::terminate();
         }
     });
 
