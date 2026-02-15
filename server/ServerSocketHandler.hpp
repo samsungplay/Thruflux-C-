@@ -61,6 +61,11 @@ namespace server {
                 nlohmann::json j = nlohmann::json::parse(message);
                 const std::string type = j.value("type", "");
                 if (isSender && type == "create_transfer_session_payload") {
+                    if (session->getUserData()->sessionCreationAttempted) {
+                        session->end(4000, "Only one session creation attempt is allowed per connection");
+                        return;
+                    }
+                    session->getUserData()->sessionCreationAttempted = true;
                     const auto payload = j.get<common::CreateTransferSessionPayload>();
                     if (payload.maxReceivers > ServerConfig::maxReceiversPerSender) {
                         session->end(4000, "Server forbids sender to have max receivers of more than " + std::to_string(ServerConfig::maxReceiversPerSender));
@@ -76,6 +81,7 @@ namespace server {
                         session->end(4000, "Server has reached max number of sessions");
                         return;
                     }
+
 
                     session->send(nlohmann::json(common::CreatedTransferSessionPayload{
                         .joinCode = transferSession->joinCode()
