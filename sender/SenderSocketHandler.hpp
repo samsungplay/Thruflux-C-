@@ -78,6 +78,8 @@ namespace sender {
                                                                               joinTransferSessionPayload)](
                                                                   common::CandidatesResult result) {
 
+                                                                          spdlog::info("ERM");
+
                                                                           common::IceHandler::establishConnection(
                                                                               true,
                                                                               receiverId,
