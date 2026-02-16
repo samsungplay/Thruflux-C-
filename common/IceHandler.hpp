@@ -254,11 +254,8 @@ namespace common {
                 if (streamState->alreadyFired) return;
 
                 if (state == NICE_COMPONENT_STATE_READY) {
-                    streamState->readyComponents++;
-                    if (streamState->readyComponents == streamState->totalComponents) {
-                        streamState->alreadyFired = true;
-                        streamState->callback(agent, true, stream_id, n);
-                    }
+                    streamState->alreadyFired = true;
+                    streamState->callback(agent, true, stream_id, n);
                 } else if (state == NICE_COMPONENT_STATE_FAILED) {
                     streamState->alreadyFired = true;
                     streamState->callback(nullptr, false, stream_id, n);
