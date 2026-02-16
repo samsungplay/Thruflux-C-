@@ -279,7 +279,9 @@ namespace common {
             int n = componentListsMap.size();
 
             for (auto &[componentId, list]: componentListsMap) {
-                nice_agent_set_remote_candidates(agent, streamId, componentId, list);
+                int accepted = nice_agent_set_remote_candidates(agent, streamId, componentId, list);
+                spdlog::info("Remote candidates set: component={} provided={} accepted={}",
+                             componentId, g_slist_length(list), accepted);
                 g_slist_free_full(list, reinterpret_cast<GDestroyNotify>(nice_candidate_free));
             }
 
