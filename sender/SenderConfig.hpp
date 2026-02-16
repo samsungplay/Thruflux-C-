@@ -116,9 +116,6 @@ namespace sender {
             app->set_version_flag("--version", "Thruflux v0.3.0");
 
             app->parse_complete_callback([&]() {
-                if (forceTurn && turnServers.empty()) {
-                    throw CLI::ValidationError("--force-turn", "requires --turn-server to be set");
-                }
 
                 if (totalStreams > quicMaxStreams) {
                     throw CLI::ValidationError("--total-streams",
