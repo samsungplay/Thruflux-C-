@@ -45,6 +45,7 @@ namespace receiver {
             uint8_t *p = manifestBuf.data();
             uint32_t count;
             memcpy(&count, p, 4);
+            cache.reset(count);
             p += 4;
             fileSizes.resize(count);
 
@@ -265,6 +266,8 @@ namespace receiver {
         uint32_t fileId = 0;
         uint8_t writeBuffer[1024 * 1024];
         blake3_hasher hasher;
+        int fd = -1;
+        uint32_t fdFileId = UINT32_MAX;
 
 
     };

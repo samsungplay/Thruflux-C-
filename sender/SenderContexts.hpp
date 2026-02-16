@@ -48,11 +48,15 @@ namespace sender {
         int totalExpectedFilesCount;
         std::vector<FileInfo> files;
         std::vector<uint8_t> manifestBlob;
-        std::unordered_map<uint32_t, std::shared_ptr<MmapEntry> > mmaps;
-        std::list<uint32_t> lruList;
-        const size_t MAX_MMAPS = 16;
+        const size_t MAX_MMAPS = 128;
         std::list<std::unique_ptr<indicators::ProgressBar> > progressBarsStorage;
         indicators::DynamicProgress<indicators::ProgressBar> progressBars;
+        std::vector<std::shared_ptr<MmapEntry>> mmapSlots;
+        std::vector<int> lruPrev;
+        std::vector<int> lruNext;
+        int lruHead = -1;
+        int lruTail = -1;
+        size_t mmapLive = 0;
 
         SenderPersistentContext() {
             progressBars.set_option(indicators::option::HideBarWhenComplete(false));
@@ -187,24 +191,62 @@ namespace sender {
         }
 
         std::shared_ptr<MmapEntry> getMmap(uint32_t id) {
-            auto it = mmaps.find(id);
-            if (it != mmaps.end()) {
-                lruList.splice(lruList.begin(), lruList, it->second->lruIt);
-                return it->second;
+            const size_t n = files.size();
+            if (id >= n) return nullptr;
+
+            if (mmapSlots.empty()) {
+                mmapSlots.assign(n, nullptr);
+                lruPrev.assign(n, -1);
+                lruNext.assign(n, -1);
+                lruHead = -1;
+                lruTail = -1;
+                mmapLive = 0;
             }
-            if (mmaps.size() >= MAX_MMAPS) {
-                uint32_t evict = lruList.back();
-                mmaps.erase(evict);
-                lruList.pop_back();
+
+            auto removeNode = [&](int x) {
+                int p = lruPrev[x];
+                int q = lruNext[x];
+                if (p != -1) lruNext[p] = q; else lruHead = q;
+                if (q != -1) lruPrev[q] = p; else lruTail = p;
+                lruPrev[x] = -1;
+                lruNext[x] = -1;
+            };
+
+            auto pushFront = [&](int x) {
+                lruPrev[x] = -1;
+                lruNext[x] = lruHead;
+                if (lruHead != -1) lruPrev[lruHead] = x; else lruTail = x;
+                lruHead = x;
+            };
+
+            auto touch = [&](int x) {
+                if (lruHead == x) return;
+                if (lruPrev[x] != -1 || lruNext[x] != -1 || lruTail == x) removeNode(x);
+                pushFront(x);
+            };
+
+            if (auto &slot = mmapSlots[id]) {
+                touch((int)id);
+                return slot;
             }
+
+            while (mmapLive >= MAX_MMAPS) {
+                if (lruTail == -1) break;
+                const int evictId = lruTail;
+                removeNode(evictId);
+                if (mmapSlots[(uint32_t)evictId]) {
+                    mmapSlots[(uint32_t)evictId].reset();
+                    if (mmapLive > 0) mmapLive--;
+                }
+            }
+
             auto mmapEntry = std::make_shared<MmapEntry>(files[id].path, files[id].size);
-            if (mmapEntry->ptr) {
-                lruList.push_front(id);
-                mmapEntry->lruIt = lruList.begin();
-                mmaps[id] = mmapEntry;
-                return mmapEntry;
-            }
-            return nullptr;
+            if (!mmapEntry->ptr) return nullptr;
+
+            mmapSlots[id] = mmapEntry;
+            pushFront((int)id);
+            mmapLive++;
+            return mmapEntry;
         }
 
         int addNewProgressBar(std::string prefix) {

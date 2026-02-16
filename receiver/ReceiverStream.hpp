@@ -279,6 +279,10 @@ namespace receiver {
                             memcpy(&ctx->chunkOffset, ctx->headerBuf, 8);
                             memcpy(&ctx->chunkLength, ctx->headerBuf + 8, 4);
                             memcpy(&ctx->fileId, ctx->headerBuf + 12, 4);
+                            if (ctx->fd == -1 || ctx->fdFileId != ctx->fileId) {
+                                ctx->fd = connCtx->cache.get(ctx->fileId, O_WRONLY | O_CREAT, 0644);
+                                ctx->fdFileId = ctx->fileId;
+                            }
                             ctx->readingHeader = false;
                             ctx->bodyBytesRead = 0;
                         } else {
@@ -293,7 +297,7 @@ namespace receiver {
                         }
 
 
-                        const int fd = connCtx->cache.get(ctx->fileId, O_WRONLY | O_CREAT, 0644);
+                        const int fd = ctx->fd;
                         if (fd == -1) {
                             spdlog::error("Unexpected error: Could not get fd");
                             lsquic_stream_close(stream);
