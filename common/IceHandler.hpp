@@ -253,6 +253,8 @@ namespace common {
                     ](guint stream_id, guint state) {
                 if (streamState->alreadyFired) return;
 
+                spdlog::info("Erm?");
+
                 if (state == NICE_COMPONENT_STATE_READY) {
                     streamState->alreadyFired = true;
                     streamState->callback(agent, true, stream_id, n);
