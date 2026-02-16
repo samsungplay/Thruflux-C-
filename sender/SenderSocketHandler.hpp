@@ -83,7 +83,7 @@ namespace sender {
                                                                                          common::RejectTransferSessionPayload
                                                                                          {
                                                                                              .receiverId = receiverId,
-                                                                                             .reason = "Could not establish P2P path"
+                                                                                             .reason = "P2P Negotiation failed: Route unavailable."
                                                                                          }).dump());
                                                                               return;
                                                                           }
@@ -112,7 +112,7 @@ namespace sender {
                                                                                           common::RejectTransferSessionPayload
                                                                                           {
                                                                                               .receiverId = receiverId,
-                                                                                              .reason = "Could not establish P2P path"
+                                                                                              .reason = "P2P Negotiation failed: Route unavailable."
                                                                                           }).dump());
                                                                                   }
                                                                               });

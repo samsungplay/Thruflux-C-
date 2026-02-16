@@ -46,7 +46,7 @@ namespace receiver {
                                                                       [&socket](common::CandidatesResult result) {
 
                                                                           if (result.serializedCandidates.empty()) {
-                                                                              spdlog::error("Could not establish P2P path.");
+                                                                            spdlog::error("P2P Negotiation failed: Route unavailable.");
                                                                               common::ThreadManager::terminate();
                                                                               return;
                                                                           }
