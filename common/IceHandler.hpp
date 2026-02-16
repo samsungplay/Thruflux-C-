@@ -61,6 +61,33 @@ namespace common {
 
     class IceHandler {
     public:
+        static const char *candTypeStr(NiceCandidateType t) {
+            switch (t) {
+                case NICE_CANDIDATE_TYPE_HOST: return "host";
+                case NICE_CANDIDATE_TYPE_SERVER_REFLEXIVE: return "srflx";
+                case NICE_CANDIDATE_TYPE_PEER_REFLEXIVE: return "prflx";
+                case NICE_CANDIDATE_TYPE_RELAYED: return "relayed";
+                default: return "unknown";
+            }
+        }
+
+        static const char *candTransportStr(NiceCandidateTransport t) {
+            switch (t) {
+                case NICE_CANDIDATE_TRANSPORT_UDP: return "udp";
+                case NICE_CANDIDATE_TRANSPORT_TCP_ACTIVE: return "tcp_active";
+                case NICE_CANDIDATE_TRANSPORT_TCP_PASSIVE: return "tcp_passive";
+                case NICE_CANDIDATE_TRANSPORT_TCP_SO: return "tcp_so";
+                default: return "unknown";
+            }
+        }
+
+        static std::string niceAddrToString(const NiceAddress &addr) {
+            gchar ip[NICE_ADDRESS_STRING_LEN] = {0};
+            nice_address_to_string(&addr, ip);
+            const guint port = nice_address_get_port(&addr);
+            return std::string(ip) + ":" + std::to_string(port);
+        }
+
         static void initialize() {
             g_networking_init();
         }
@@ -132,9 +159,9 @@ namespace common {
             }
             for (const auto &turn: turnServers_) {
                 for (int i = 1; i <= n; i++) {
-                    spdlog::info("{} {} {} {}",turn.host.c_str(), turn.port,
-                                          turn.username.c_str(),
-                                          turn.password.c_str());
+                    spdlog::info("{} {} {} {}", turn.host.c_str(), turn.port,
+                                 turn.username.c_str(),
+                                 turn.password.c_str());
                     nice_agent_set_relay_info(agent, stream_id, i, turn.host.c_str(), turn.port,
                                               turn.username.c_str(),
                                               turn.password.c_str(), NICE_RELAY_TYPE_TURN_UDP);
@@ -152,6 +179,13 @@ namespace common {
                     GSList *localCandidates = nice_agent_get_local_candidates(agent, stream_id, i);
                     for (const GSList *iterator = localCandidates; iterator != nullptr; iterator = iterator->next) {
                         const auto candidate = static_cast<NiceCandidate *>(iterator->data);
+
+                        spdlog::info("Cand: type={} transport={} addr={} base={} prio={}",
+                                     (int) candidate->type,
+                                     (int) candidate->transport,
+                                     niceAddrToString(candidate->addr),
+                                     niceAddrToString(candidate->base_addr),
+                                     (uint32_t) candidate->priority);
 
                         if (candidate->transport != NICE_CANDIDATE_TRANSPORT_UDP) {
                             continue;
