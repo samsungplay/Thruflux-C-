@@ -162,7 +162,7 @@ namespace common {
                     spdlog::info("{} {} {} {}", turn.host.c_str(), turn.port,
                                  turn.username.c_str(),
                                  turn.password.c_str());
-                    nice_agent_set_relay_info(agent, stream_id, i, turn.host.c_str(), turn.port,
+                    nice_agent_set_relay_info(agent, stream_id, i, "15.204.218.94", turn.port,
                                               turn.username.c_str(),
                                               turn.password.c_str(), NICE_RELAY_TYPE_TURN_UDP);
                 }
