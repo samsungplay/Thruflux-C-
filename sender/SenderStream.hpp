@@ -162,6 +162,7 @@ namespace sender {
                 auto *ctx = new SenderStreamContext();
 
                 ctx->connectionContext = connCtx;
+                ctx->readBuf.resize(1024 * 1024);
 
 
                 if (!connCtx->manifestStreamCreated) {
@@ -289,13 +290,14 @@ namespace sender {
                             return;
                         }
                     } else {
-                        if (!ctx->currentMmap) {
-                            spdlog::error("Unexpected error: currentMmap missing for QUIC connection");
+                        if (ctx->readBuf.empty()) {
+                            spdlog::error("Unexpected error: chunkBuf missing for QUIC connection");
                             lsquic_stream_close(stream);
                             return;
                         }
+
                         size_t remaining = ctx->len - ctx->bytesSent;
-                        const uint8_t *ptr = ctx->currentMmap->ptr + ctx->offset +
+                        const uint8_t *ptr = ctx->readBuf.data() +
                                              ctx->bytesSent;
                         ssize_t nw = lsquic_stream_write(stream, ptr, remaining);
                         if (nw <= 0) {
@@ -306,7 +308,6 @@ namespace sender {
                         connCtx->logicalBytesMoved += nw;
 
                         if (ctx->bytesSent >= ctx->len) {
-                            ctx->currentMmap = nullptr;
                             if (!ctx->loadNextChunk()) {
                                 lsquic_stream_shutdown(stream, 1);
                                 //now wait for receiver ACK

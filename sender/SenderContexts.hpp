@@ -7,33 +7,6 @@
 #include "blake3.h"
 
 namespace sender {
-    struct MmapEntry {
-        int fd = -1;
-        uint8_t *ptr = nullptr;
-        size_t size = 0;
-        std::list<uint32_t>::iterator lruIt;
-
-        MmapEntry(const std::string &path, size_t sz) : size(sz) {
-            fd = open(path.c_str(), O_RDONLY);
-            if (fd != -1) {
-                ptr = static_cast<uint8_t *>(mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0));
-                if (ptr == MAP_FAILED) {
-                    spdlog::error("Failed to map file: {}", path);
-                    ptr = nullptr;
-                    close(fd);
-                    fd = -1;
-                } else {
-                    madvise(ptr, size, MADV_SEQUENTIAL);
-                }
-            }
-        }
-
-        ~MmapEntry() {
-            if (ptr) munmap(ptr, size);
-            if (fd != -1) close(fd);
-        }
-    };
-
     struct FileInfo {
         uint32_t id;
         uint64_t size;
@@ -51,12 +24,8 @@ namespace sender {
         const size_t MAX_MMAPS = 128;
         std::list<std::unique_ptr<indicators::ProgressBar> > progressBarsStorage;
         indicators::DynamicProgress<indicators::ProgressBar> progressBars;
-        std::vector<std::shared_ptr<MmapEntry>> mmapSlots;
-        std::vector<int> lruPrev;
-        std::vector<int> lruNext;
-        int lruHead = -1;
-        int lruTail = -1;
-        size_t mmapLive = 0;
+        std::vector<int> fileFds;
+
 
         SenderPersistentContext() {
             progressBars.set_option(indicators::option::HideBarWhenComplete(false));
@@ -147,6 +116,7 @@ namespace sender {
             for (uint32_t i = 0; i < files.size(); ++i) {
                 files[i].id = i;
             }
+            fileFds.assign(files.size(), -1);
 
             std::string stats = std::to_string(filesCount) + " file(s), " + common::Utils::sizeToReadableFormat(
                                     totalSize);
@@ -190,69 +160,34 @@ namespace sender {
             scannerBar.mark_as_completed();
         }
 
-        std::shared_ptr<MmapEntry> getMmap(uint32_t id) {
-            const size_t n = files.size();
-            if (id >= n) return nullptr;
 
-            if (mmapSlots.empty()) {
-                mmapSlots.assign(n, nullptr);
-                lruPrev.assign(n, -1);
-                lruNext.assign(n, -1);
-                lruHead = -1;
-                lruTail = -1;
-                mmapLive = 0;
+        int getFd(uint32_t id) {
+            if (id >= files.size()) return -1;
+            int &fd = fileFds[id];
+            if (fd != -1) return fd;
+            fd = open(files[id].path.c_str(), O_RDONLY);
+            if (fd == -1) {
+                spdlog::error("Failed to open file {}: errno={}", files[id].path, errno);
+                return -1;
             }
-
-            auto removeNode = [&](int x) {
-                int p = lruPrev[x];
-                int q = lruNext[x];
-                if (p != -1) lruNext[p] = q; else lruHead = q;
-                if (q != -1) lruPrev[q] = p; else lruTail = p;
-                lruPrev[x] = -1;
-                lruNext[x] = -1;
-            };
-
-            auto pushFront = [&](int x) {
-                lruPrev[x] = -1;
-                lruNext[x] = lruHead;
-                if (lruHead != -1) lruPrev[lruHead] = x; else lruTail = x;
-                lruHead = x;
-            };
-
-            auto touch = [&](int x) {
-                if (lruHead == x) return;
-                if (lruPrev[x] != -1 || lruNext[x] != -1 || lruTail == x) removeNode(x);
-                pushFront(x);
-            };
-
-            if (auto &slot = mmapSlots[id]) {
-                touch((int)id);
-                return slot;
-            }
-
-            while (mmapLive >= MAX_MMAPS) {
-                if (lruTail == -1) break;
-                const int evictId = lruTail;
-                removeNode(evictId);
-                if (mmapSlots[(uint32_t)evictId]) {
-                    mmapSlots[(uint32_t)evictId].reset();
-                    if (mmapLive > 0) mmapLive--;
-                }
-            }
-
-            auto mmapEntry = std::make_shared<MmapEntry>(files[id].path, files[id].size);
-            if (!mmapEntry->ptr) return nullptr;
-
-            mmapSlots[id] = mmapEntry;
-            pushFront((int)id);
-            mmapLive++;
-            return mmapEntry;
+#if defined(__linux__)
+            posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+#endif
+            return fd;
         }
 
         int addNewProgressBar(std::string prefix) {
             progressBarsStorage.push_back(common::Utils::createProgressBarUniquePtr(std::move(prefix)));
             const size_t id = progressBars.push_back(*progressBarsStorage.back());
             return id;
+        }
+
+        void dispose() {
+            for (int &fd : fileFds) {
+                if (fd != -1) {
+                    close(fd); fd = -1;
+                }
+            }
         }
     };
 
@@ -278,7 +213,8 @@ namespace sender {
         SenderConnectionContext *connectionContext = nullptr;
         bool typeByteSent = false;
         bool isManifestStream = false;
-        std::shared_ptr<MmapEntry> currentMmap;
+        int currentFd = -1;
+        std::vector<uint8_t> readBuf;
         uint32_t fileId = 0;
         uint64_t offset = 0;
         uint32_t len = 0;
@@ -324,11 +260,29 @@ namespace sender {
                 len = std::min(common::CHUNK_SIZE, f.size - off);
                 bytesSent = 0;
 
-                currentMmap = senderPersistentContext.getMmap(fileId);
+                currentFd = senderPersistentContext.getFd(fileId);
 
-                if (!currentMmap) {
-                    spdlog::error("Failed to mmap file ID {}: {}", fileId, f.path);
+                if (currentFd == -1) {
+                    spdlog::error("Failed to open fd for file ID {}: {}", fileId, f.path);
                     return false;
+                }
+
+                size_t done = 0;
+                while (done < len) {
+                    const ssize_t nr = ::pread(currentFd,
+                                         readBuf.data() + done,
+                                         len - done,
+                                         static_cast<off_t>(offset + done));
+                    if (nr == 0) {
+                        spdlog::error("Unexpected EOF on fileId {} at offset {}", fileId, offset + done);
+                        return false;
+                    }
+                    if (nr < 0) {
+                        if (errno == EINTR) continue;
+                        spdlog::error("pread failed fileId {}, Error : {}", fileId, errno);
+                        return false;
+                    }
+                    done += static_cast<size_t>(nr);
                 }
 
                 memcpy(headerBuf, &offset, 8);
