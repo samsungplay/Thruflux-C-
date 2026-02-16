@@ -20,7 +20,8 @@
     "libnice",
     "nlohmann-json",
     "spdlog",
-    "uwebsockets"
+    "uwebsockets",
+    "mbedtls"
   ],
   "overrides": [
     {
