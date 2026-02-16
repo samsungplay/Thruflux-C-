@@ -97,6 +97,14 @@ namespace sender {
                                                                                               .receiverId = receiverId,
                                                                                           }).dump());
                                                                                   }
+                                                                                  else {
+                                                                                      socket.send(nlohmann::json(
+                                                                                          common::RejectTransferSessionPayload
+                                                                                          {
+                                                                                              .receiverId = receiverId,
+                                                                                              .reason = "Could not establish P2P path"
+                                                                                          }).dump());
+                                                                                  }
                                                                               });
                                                                       });
                         });
