@@ -36,12 +36,15 @@ namespace receiver {
 
         ix::initNetSystem();
 
-        receiver::ReceiverStream::initialize();
+        ReceiverStream::initialize();
         ix::WebSocket socketClient;
+        ix::SocketTLSOptions tlsOptions;
+        tlsOptions.caFile = common::EMBEDDED_CA_BUNDLE;
+        socketClient.setTLSOptions(tlsOptions);
         socketClient.disableAutomaticReconnection();
 
 
-        socketClient.setUrl(common::Utils::toWebSocketURL(receiver::ReceiverConfig::serverUrl));
+        socketClient.setUrl(ReceiverConfig::serverUrl);
         ix::WebSocketHttpHeaders headers;
         headers["x-role"] = "receiver";
         headers["x-id"] = common::Utils::generateNanoId();

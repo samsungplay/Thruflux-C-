@@ -36,13 +36,16 @@ namespace sender {
 
         ix::initNetSystem();
         ix::WebSocket socketClient;
+        ix::SocketTLSOptions tlsOptions;
+        tlsOptions.caFile = common::EMBEDDED_CA_BUNDLE;
+        socketClient.setTLSOptions(tlsOptions);
         socketClient.disableAutomaticReconnection();
         common::IceHandler::initialize();
 
-        sender::SenderStream::initialize();
+        SenderStream::initialize();
 
 
-        socketClient.setUrl(common::Utils::toWebSocketURL(sender::SenderConfig::serverUrl));
+        socketClient.setUrl(SenderConfig::serverUrl);
         ix::WebSocketHttpHeaders headers;
         headers["x-role"] = "sender";
         headers["x-id"] = common::Utils::generateNanoId();
@@ -74,6 +77,8 @@ namespace sender {
         common::IceHandler::destroy();
 
         sender::SenderStream::dispose();
+
+        senderPersistentContext.dispose();
 
         ix::uninitNetSystem();
         return 0;

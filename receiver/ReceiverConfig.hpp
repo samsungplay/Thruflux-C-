@@ -10,7 +10,7 @@ namespace receiver {
     public:
         inline static std::string joinCode;
         inline static std::string out = ".";
-        inline static std::string serverUrl = "https://bytepipe.app";
+        inline static std::string serverUrl = "wss://bytepipe.app/ws";
 
         inline static std::string stunServers = "stun://stun.cloudflare.com:3478";
         inline static std::string turnServers;
@@ -28,12 +28,12 @@ namespace receiver {
 
         static void initialize(CLI::App* app) {
 
-            const auto isHttpUrl = CLI::Validator(
+            const auto isWsUrl = CLI::Validator(
                 [](const std::string &s) -> std::string {
-                    if (s.rfind("http://", 0) == 0 || s.rfind("https://", 0) == 0) return {};
-                    return "must start with http:// or https://";
+                    if (s.rfind("ws://", 0) == 0 || s.rfind("wss://", 0) == 0) return {};
+                    return "must start with ws:// or wss://";
                 },
-                "HTTP_URL"
+                "WEBSOCKET_URL"
             );
 
             const auto isStunUrl = CLI::Validator(
@@ -76,7 +76,7 @@ namespace receiver {
                     ->capture_default_str();
 
             app->add_option("--server-url", serverUrl, "HTTP(S) URL of signaling server")
-                    ->check(isHttpUrl)
+                    ->check(isWsUrl)
                     ->capture_default_str();
 
             app->add_option("--stun-server", stunServers, "STUN server URL")

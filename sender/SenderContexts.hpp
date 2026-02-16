@@ -269,7 +269,7 @@ namespace sender {
 
                 size_t done = 0;
                 while (done < len) {
-                    const ssize_t nr = ::pread(currentFd,
+                    const ssize_t nr = pread(currentFd,
                                          readBuf.data() + done,
                                          len - done,
                                          static_cast<off_t>(offset + done));
@@ -279,7 +279,7 @@ namespace sender {
                     }
                     if (nr < 0) {
                         if (errno == EINTR) continue;
-                        spdlog::error("pread failed fileId {}, Error : {}", fileId, errno);
+                        spdlog::error("pread failed; fileId {}, Error : {}", fileId, errno);
                         return false;
                     }
                     done += static_cast<size_t>(nr);
