@@ -180,12 +180,12 @@ namespace common {
                     for (const GSList *iterator = localCandidates; iterator != nullptr; iterator = iterator->next) {
                         const auto candidate = static_cast<NiceCandidate *>(iterator->data);
 
-                        spdlog::info("Cand: type={} transport={} addr={} base={} prio={}",
-                                     (int) candidate->type,
-                                     (int) candidate->transport,
-                                     niceAddrToString(candidate->addr),
-                                     niceAddrToString(candidate->base_addr),
-                                     (uint32_t) candidate->priority);
+                        // spdlog::info("Cand: type={} transport={} addr={} base={} prio={}",
+                        //              (int) candidate->type,
+                        //              (int) candidate->transport,
+                        //              niceAddrToString(candidate->addr),
+                        //              niceAddrToString(candidate->base_addr),
+                        //              (uint32_t) candidate->priority);
 
                         if (candidate->transport != NICE_CANDIDATE_TRANSPORT_UDP) {
                             continue;
