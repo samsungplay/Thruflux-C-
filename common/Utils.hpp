@@ -13,7 +13,7 @@
 
 
 namespace common {
-    inline const std::string EMBEDDED_CA_BUNDLE = R"(
+    inline constexpr char EMBEDDED_CA_BUNDLE[] = R"(
 -----BEGIN CERTIFICATE-----
 MIIF6zCCA9OgAwIBAgIIVrYpzTS8ePYwDQYJKoZIhvcNAQELBQAwgYIxCzAJBgNV
 BAYTAlVTMQ4wDAYDVQQIDAVUZXhhczEQMA4GA1UEBwwHSG91c3RvbjEYMBYGA1UE
