@@ -138,6 +138,8 @@ namespace common {
                 }
             }
 
+            spdlog::info(turnServers_.size());
+
             const auto onGatheringDoneCallback = [isSender, n, agent, stream_id, callback = std::move(callback)]() {
                 auto serializedCandidates = nlohmann::json::array();
                 gchar *ufrag = nullptr;
