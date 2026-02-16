@@ -27,6 +27,9 @@ namespace server {
         inline static int turnStaticCredTtl = 600;
 
         static void initialize(CLI::App* app) {
+
+
+
             app->set_version_flag("--version", "Thruflux Server v0.3.0");
 
             app->add_option("--port", port, "Port to run the server on.")
@@ -107,8 +110,7 @@ namespace server {
                     if (s.empty()) return {};
                     const bool ok =
                             (s.rfind("turn://", 0) == 0) ||
-                            (s.rfind("turns://", 0) == 0) ||
-                            (s.rfind("turn:", 0) == 0);
+                            (s.rfind("turns://", 0) == 0);
                     if (!ok) return "must start with turn://, turns://, or turn:";
                     return {};
                 },
