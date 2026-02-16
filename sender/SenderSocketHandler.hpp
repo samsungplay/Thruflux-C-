@@ -77,16 +77,26 @@ namespace sender {
                                                                           payload = std::move(
                                                                               joinTransferSessionPayload)](
                                                                   common::CandidatesResult result) {
-
                                                                           if (result.serializedCandidates.empty()) {
                                                                               socket.send(nlohmann::json(
-                                                                                         common::RejectTransferSessionPayload
-                                                                                         {
-                                                                                             .receiverId = receiverId,
-                                                                                             .reason = "P2P Negotiation failed: Route unavailable."
-                                                                                         }).dump());
+                                                                                  common::RejectTransferSessionPayload
+                                                                                  {
+                                                                                      .receiverId = receiverId,
+                                                                                      .reason =
+                                                                                      "P2P Negotiation failed: Route unavailable."
+                                                                                  }).dump());
                                                                               return;
                                                                           }
+
+                                                                          senderPersistentContext.receiversCount.
+                                                                                  fetch_add(1);
+                                                                          socket.send(nlohmann::json(
+                                                                              common::AcceptTransferSessionPayload
+                                                                              {
+                                                                                  .candidatesResult =
+                                                                                  std::move(result),
+                                                                                  .receiverId = receiverId,
+                                                                              }).dump());
 
                                                                           common::IceHandler::establishConnection(
                                                                               true,
@@ -97,22 +107,13 @@ namespace sender {
                                                                           NiceAgent *agent, const bool success,
                                                                           guint streamId,
                                                                           const int n) {
-                                                                                  if (success) {
-                                                                                      senderPersistentContext.receiversCount.fetch_add(1);
-                                                                                      socket.send(nlohmann::json(
-                                                                                          common::AcceptTransferSessionPayload
-                                                                                          {
-                                                                                              .candidatesResult =
-                                                                                              std::move(result),
-                                                                                              .receiverId = receiverId,
-                                                                                          }).dump());
-                                                                                  }
-                                                                                  else {
+                                                                                  if (!success) {
                                                                                       socket.send(nlohmann::json(
                                                                                           common::RejectTransferSessionPayload
                                                                                           {
                                                                                               .receiverId = receiverId,
-                                                                                              .reason = "P2P Negotiation failed: Route unavailable."
+                                                                                              .reason =
+                                                                                              "P2P Negotiation failed: Route unavailable."
                                                                                           }).dump());
                                                                                   }
                                                                               });
