@@ -44,7 +44,8 @@ namespace receiver {
 
                             common::IceHandler::gatherLocalCandidates(false, "",1,
                                                                       [&socket](common::CandidatesResult result) {
-                                                                          spdlog::info("Reaching sender...");
+
+                                                                          spdlog::info("Reaching sender... {}", result.serializedCandidates.size());
                                                                           socket.send(nlohmann::json(
                                                                               common::JoinTransferSessionPayload{
                                                                                   .candidatesResult = std::move(result),
