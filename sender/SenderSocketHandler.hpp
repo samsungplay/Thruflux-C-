@@ -78,6 +78,15 @@ namespace sender {
                                                                               joinTransferSessionPayload)](
                                                                   common::CandidatesResult result) {
 
+                                                                          if (result.serializedCandidates.empty()) {
+                                                                              socket.send(nlohmann::json(
+                                                                                         common::RejectTransferSessionPayload
+                                                                                         {
+                                                                                             .receiverId = receiverId,
+                                                                                             .reason = "Could not establish P2P path"
+                                                                                         }).dump());
+                                                                              return;
+                                                                          }
 
                                                                           common::IceHandler::establishConnection(
                                                                               true,

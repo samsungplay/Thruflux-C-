@@ -45,7 +45,13 @@ namespace receiver {
                             common::IceHandler::gatherLocalCandidates(false, "",1,
                                                                       [&socket](common::CandidatesResult result) {
 
-                                                                          spdlog::info("Reaching sender... {}", result.serializedCandidates.size());
+                                                                          if (result.serializedCandidates.empty()) {
+                                                                              spdlog::error("Could not establish P2P path.");
+                                                                              common::ThreadManager::terminate();
+                                                                              return;
+                                                                          }
+
+                                                                          spdlog::info("Joining session : {}", ReceiverConfig::joinCode);
                                                                           socket.send(nlohmann::json(
                                                                               common::JoinTransferSessionPayload{
                                                                                   .candidatesResult = std::move(result),
