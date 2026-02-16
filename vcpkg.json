@@ -14,7 +14,7 @@
     {
       "name": "ixwebsocket",
       "default-features": false,
-      "features": [ "mbedtls", "tls" ]
+      "features": [ "mbedtls" ]
     },
     "liblsquic",
     "libnice",
