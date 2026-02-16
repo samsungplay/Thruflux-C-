@@ -277,13 +277,13 @@ namespace sender {
 
                 while (true) {
                     if (ctx->sendingHeader) {
-                        size_t remaining = 48 - ctx->headerSent;
+                        size_t remaining = 16 - ctx->headerSent;
                         ssize_t nw = lsquic_stream_write(stream, ctx->headerBuf + ctx->headerSent, remaining);
                         if (nw <= 0) {
                             return;
                         }
                         ctx->headerSent += nw;
-                        if (ctx->headerSent == 48) {
+                        if (ctx->headerSent == 16) {
                             ctx->sendingHeader = false;
                         } else {
                             return;
@@ -356,7 +356,6 @@ namespace sender {
             settings.es_pace_packets = 0;
             settings.es_delayed_acks = 0;
             settings.es_max_batch_size = 32;
-            settings.es_rw_once = 1;
             settings.es_scid_len = 8;
             settings.es_max_cfcw = SenderConfig::quicConnWindowBytes * 2;
             settings.es_max_sfcw = SenderConfig::quicStreamWindowBytes * 2;
@@ -375,6 +374,7 @@ namespace sender {
             engine_ = lsquic_engine_new(0, &api);
 
             watchProgress();
+            g_timeout_add(0, engineTick, nullptr);
         }
 
 
@@ -433,7 +433,7 @@ namespace sender {
             );
 
 
-            g_timeout_add(0, engineTick, nullptr);
+
         }
 
 

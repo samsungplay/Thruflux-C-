@@ -266,7 +266,7 @@ namespace receiver {
 
                 while (true) {
                     if (ctx->readingHeader) {
-                        size_t remaining = 48 - ctx->headerBytesRead;
+                        size_t remaining = 16 - ctx->headerBytesRead;
                         ssize_t nr = lsquic_stream_read(stream, ctx->headerBuf + ctx->headerBytesRead, remaining);
                         if (nr <= 0) {
                             return;
@@ -275,15 +275,12 @@ namespace receiver {
                         ctx->headerBytesRead += nr;
 
 
-                        if (ctx->headerBytesRead == 48) {
+                        if (ctx->headerBytesRead == 16) {
                             memcpy(&ctx->chunkOffset, ctx->headerBuf, 8);
                             memcpy(&ctx->chunkLength, ctx->headerBuf + 8, 4);
                             memcpy(&ctx->fileId, ctx->headerBuf + 12, 4);
-                            memcpy(ctx->expectedHash, ctx->headerBuf + 16, 32);
-
                             ctx->readingHeader = false;
                             ctx->bodyBytesRead = 0;
-                            ctx->hasherInitialized = false;
                         } else {
                             return;
                         }
@@ -294,12 +291,6 @@ namespace receiver {
                         if (nr <= 0) {
                             break;
                         }
-                        if (!ctx->hasherInitialized) {
-                            blake3_hasher_init(&ctx->hasher);
-                            ctx->hasherInitialized = true;
-                        }
-
-                        blake3_hasher_update(&ctx->hasher, ctx->writeBuffer, static_cast<size_t>(nr));
 
 
                         const int fd = connCtx->cache.get(ctx->fileId, O_WRONLY | O_CREAT, 0644);
@@ -322,36 +313,6 @@ namespace receiver {
                         ctx->bodyBytesRead += nw;
 
                         if (ctx->bodyBytesRead >= ctx->chunkLength) {
-                            uint8_t hashResult[32];
-                            blake3_hasher_finalize(&ctx->hasher, hashResult, 32);
-
-                            if (memcmp(hashResult, ctx->expectedHash, 32) != 0) {
-                                const auto &progressBar = connCtx->progressBar;
-                                std::string postfix;
-                                postfix.reserve(256);
-                                postfix += " received ";
-                                postfix += common::Utils::sizeToReadableFormat(connCtx->bytesMoved);
-                                postfix += " resumed ";
-                                postfix += common::Utils::sizeToReadableFormat(connCtx->skippedBytes);
-                                postfix += " files ";
-                                postfix += std::to_string(connCtx->filesMoved);
-                                postfix += "/";
-                                postfix += std::to_string(connCtx->totalExpectedFilesCount);
-                                postfix += " ";
-                                postfix += connCtx->connectionType == common::ConnectionContext::RELAYED ? "relayed" : "direct";
-                                postfix += " [FAILED]";
-                                progressBar->set_option(indicators::option::PostfixText(postfix));
-                                progressBar->set_option(
-                                    indicators::option::ForegroundColor{indicators::Color::red});
-                                progressBar->mark_as_completed();
-                                spdlog::error(
-                                    "Integrity check FAILED due to file hash mismatch (fileId={} offset={} len={}. Please try again!",
-                                    ctx->fileId, ctx->chunkOffset, ctx->chunkLength
-                                );
-                                connCtx->deleteResumeBitmap();
-                                common::ThreadManager::terminate();
-                                return;
-                            }
                             const uint64_t chunkInFile = ctx->chunkOffset / common::CHUNK_SIZE;
                             const uint64_t globalChunk = connCtx->fileChunkBase[ctx->fileId] + chunkInFile;
                             if (globalChunk < connCtx->totalChunks) {
@@ -465,7 +426,6 @@ namespace receiver {
             settings.es_pace_packets = 0;
             settings.es_delayed_acks = 0;
             settings.es_max_batch_size = 32;
-            settings.es_rw_once = 1;
             settings.es_scid_len = 8;
             settings.es_max_cfcw = ReceiverConfig::quicConnWindowBytes * 2;
             settings.es_max_sfcw = ReceiverConfig::quicStreamWindowBytes * 2;

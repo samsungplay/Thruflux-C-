@@ -257,16 +257,14 @@ namespace receiver {
         enum StreamType { UNKNOWN, MANIFEST, DATA } type = UNKNOWN;
 
         bool readingHeader = true;
-        uint8_t headerBuf[48];
+        uint8_t headerBuf[16];
         uint8_t headerBytesRead = 0;
         uint64_t chunkOffset = 0;
         uint32_t chunkLength = 0;
         uint32_t bodyBytesRead = 0;
         uint32_t fileId = 0;
         uint8_t writeBuffer[1024 * 1024];
-        uint8_t expectedHash[32];
         blake3_hasher hasher;
-        bool hasherInitialized = false;
 
 
     };

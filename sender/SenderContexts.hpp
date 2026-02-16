@@ -241,7 +241,7 @@ namespace sender {
         uint64_t offset = 0;
         uint32_t len = 0;
         uint32_t bytesSent = 0;
-        uint8_t headerBuf[48];
+        uint8_t headerBuf[16];
         bool sendingHeader = false;
         uint8_t headerSent = 0;
         int id = 0;
@@ -289,18 +289,9 @@ namespace sender {
                     return false;
                 }
 
-                uint8_t hashResult[32];
-                blake3_hasher hasher;
-                blake3_hasher_init(&hasher);
-
-                blake3_hasher_update(&hasher, currentMmap->ptr + offset, len);
-                blake3_hasher_finalize(&hasher, hashResult, 32);
-
                 memcpy(headerBuf, &offset, 8);
                 memcpy(headerBuf + 8, &len, 4);
                 memcpy(headerBuf + 12, &fileId, 4);
-                memcpy(headerBuf + 16, hashResult, 32);
-
 
                 sendingHeader = true;
                 headerSent = 0;
