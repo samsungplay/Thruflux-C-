@@ -292,11 +292,9 @@ namespace common {
                 if (streamState->alreadyFired) return;
 
                 if (state == NICE_COMPONENT_STATE_READY) {
-                    spdlog::info("READY");
                     streamState->alreadyFired = true;
                     streamState->callback(agent, true, stream_id, n);
                 } else if (state == NICE_COMPONENT_STATE_FAILED) {
-                    spdlog::error("FAILED");
                     streamState->alreadyFired = true;
                     streamState->callback(nullptr, false, stream_id, n);
                 }
@@ -322,9 +320,6 @@ namespace common {
                                   static_cast<GConnectFlags>(0)
             );
 
-            if (!nice_agent_gather_candidates(agent, streamId)) {
-                callback(nullptr, false, streamId, -1);
-            }
         }
     };
 }
