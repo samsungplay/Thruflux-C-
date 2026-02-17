@@ -159,9 +159,6 @@ namespace common {
             }
             for (const auto &turn: turnServers_) {
                 for (int i = 1; i <= n; i++) {
-                    spdlog::info("{} {} {} {}", turn.host.c_str(), turn.port,
-                                 turn.username.c_str(),
-                                 turn.password.c_str());
                     nice_agent_set_relay_info(agent, stream_id, i, turn.host.c_str(), turn.port,
                                               turn.username.c_str(),
                                               turn.password.c_str(), NICE_RELAY_TYPE_TURN_UDP);
