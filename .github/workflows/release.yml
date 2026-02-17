@@ -75,6 +75,7 @@ jobs:
         with:
           vcpkgJsonGlob: "vcpkg.json"
           vcpkgGitCommitId: ${{ matrix.vcpkg_commit }}
+          runVcpkgInstall: true
 
       - name: Configure CMake
         shell: bash
