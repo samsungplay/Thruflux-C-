@@ -93,11 +93,18 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf build
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cmake -S . -B build ^
+            -DCMAKE_TOOLCHAIN_FILE="%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake" ^
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} ^
+            -DCMAKE_BUILD_TYPE=Release
+          else
           cmake -S . -B build -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE="${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" \
-            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+          -DCMAKE_TOOLCHAIN_FILE="${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" \
+          -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+          fi
 
       - name: Build
         shell: bash
@@ -111,7 +118,7 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           TAG="${GITHUB_REF_NAME}"
-
+      
           # Find executable (handle multi-config vs single-config layouts)
           BIN_PATH=""
           if [ "${{ runner.os }}" = "Windows" ]; then
@@ -119,26 +126,26 @@ jobs:
           else
             BIN_PATH=$(find build -type f \( -name "thru" \) | head -n 1 || true)
           fi
-
+      
           if [ -z "$BIN_PATH" ]; then
             echo "ERROR: Could not find built binary (thru/thru.exe) under build/"
             echo "Build tree:"
             find build -maxdepth 4 -type f | head -n 200
             exit 1
           fi
-
+      
           echo "Found binary at: $BIN_PATH"
           cp "$BIN_PATH" dist/
-
+      
           ASSET="thruflux-${TAG}-${{ matrix.platform }}.${{ matrix.asset_ext }}"
-
+      
           if [ "${{ runner.os }}" = "Windows" ]; then
             7z a "$ASSET" ./dist/*
           else
             chmod +x dist/thru || true
             tar -C dist -czf "$ASSET" .
           fi
-
+      
           echo "ASSET_PATH=$ASSET" >> "$GITHUB_ENV"
 
       - name: Upload Build Artifact
