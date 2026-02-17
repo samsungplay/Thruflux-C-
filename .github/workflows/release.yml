@@ -18,50 +18,83 @@ jobs:
         include:
           - os: ubuntu-latest
             triplet: x64-linux
-            asset_name: linux.tar.gz
+            asset_ext: tar.gz
+            vcpkg_commit: fb87e2bb3fe69e16c224989acb5a61349166c782
+
           - os: macos-latest
-            triplet: x64-osx
-            asset_name: macos.tar.gz
+            triplet: arm64-osx
+            asset_ext: tar.gz
+            vcpkg_commit: fb87e2bb3fe69e16c224989acb5a61349166c782
+
           - os: windows-latest
             triplet: x64-windows-static
-            asset_name: windows.zip
+            asset_ext: zip
+            vcpkg_commit: fb87e2bb3fe69e16c224989acb5a61349166c782
+
+    env:
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg_binary_cache,readwrite"
+      VCPKG_FEATURE_FLAGS: "manifests,binarycaching"
+      VCPKG_DISABLE_METRICS: "1"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Cache vcpkg binary packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/vcpkg_binary_cache
+          key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}-${{ matrix.vcpkg_commit }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ matrix.triplet }}-
+
+      - name: Setup sccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          variant: sccache
+          key: sccache-${{ runner.os }}-${{ matrix.triplet }}
+          max-size: 2G
+
       - name: Install System Dependencies
         shell: bash
         run: |
-                if [ "${{ runner.os }}" = "Linux" ]; then
-                  sudo apt-get update && sudo apt-get install -y nasm
-                elif [ "${{ runner.os }}" = "macOS" ]; then
-                  brew install nasm
-                elif [ "${{ runner.os }}" = "Windows" ]; then
-                  choco install nasm
-                fi
+          set -euo pipefail
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y nasm pkg-config
+          elif [ "${{ runner.os }}" = "macOS" ]; then
+            brew update
+            brew install nasm pkg-config ninja
+          elif [ "${{ runner.os }}" = "Windows" ]; then
+            choco install -y nasm ninja
+          fi
 
-      - name: Get Latest CMake
+      - name: Get CMake
         uses: lukka/get-cmake@latest
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgJsonGlob: "vcpkg.json"
-          vcpkgGitCommitId: 'fb87e2bb3fe69e16c224989acb5a61349166c782'
+          vcpkgGitCommitId: ${{ matrix.vcpkg_commit }}
 
       - name: Configure CMake
         shell: bash
         run: |
-          cmake -S . -B build \
+          set -euo pipefail
+          rm -rf build
+          cmake -S . -B build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
-            -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_CXX_STANDARD=17 \
-            -DCMAKE_CXX_STANDARD_REQUIRED=ON
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
       - name: Build
-        run: cmake --build build --config Release -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release -j$(nproc 2>/dev/null || sysctl -n hw.ncpu || echo 2)
 
       - name: Package Binary
         shell: bash
@@ -69,25 +102,40 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           TAG="${GITHUB_REF_NAME}"
-          
-          BIN_PATH=$(find build -name "thru" -o -name "thru.exe" | grep -i "Release" || find build -name "thru" -o -name "thru.exe" | head -n 1)
-          
+
+          # Find executable (handle multi-config vs single-config layouts)
+          BIN_PATH=""
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            BIN_PATH=$(find build -type f \( -name "thru.exe" \) | head -n 1 || true)
+          else
+            BIN_PATH=$(find build -type f \( -name "thru" \) | head -n 1 || true)
+          fi
+
+          if [ -z "$BIN_PATH" ]; then
+            echo "ERROR: Could not find built binary (thru/thru.exe) under build/"
+            echo "Build tree:"
+            find build -maxdepth 4 -type f | head -n 200
+            exit 1
+          fi
+
           echo "Found binary at: $BIN_PATH"
           cp "$BIN_PATH" dist/
-          
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            cd dist && 7z a "../thruflux-${TAG}-${{ matrix.asset_name }}" .
+
+          ASSET="thruflux-${TAG}-${{ runner.os }}-${{ matrix.triplet }}.${{ matrix.asset_ext }}"
+
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "$ASSET" ./dist/*
           else
-            chmod +x dist/thru
-            tar -C dist -czf "thruflux-${TAG}-${{ matrix.asset_name }}" .
+            chmod +x dist/thru || true
+            tar -C dist -czf "$ASSET" .
           fi
-          
-          echo "ASSET_PATH=thruflux-${TAG}-${{ matrix.asset_name }}" >> $GITHUB_ENV
+
+          echo "ASSET_PATH=$ASSET" >> "$GITHUB_ENV"
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.asset_name }}
+          name: thruflux-${{ runner.os }}-${{ matrix.triplet }}
           path: ${{ env.ASSET_PATH }}
 
   release:

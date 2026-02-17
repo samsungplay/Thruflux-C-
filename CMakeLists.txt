@@ -1,10 +1,10 @@
-cmake_minimum_required(VERSION 4.1)
+cmake_minimum_required(VERSION 3.24)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-project(Thruflux_C__)
+project(Thruflux_C__ LANGUAGES CXX)
 
 find_package(CLI11 CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
@@ -20,21 +20,10 @@ find_package(blake3 CONFIG REQUIRED)
 find_package(MbedTLS CONFIG REQUIRED)
 pkg_check_modules(NICE REQUIRED IMPORTED_TARGET nice)
 
-set(COMMON_SOURCES
-        common/Utils.hpp
-        common/Payloads.hpp
-        common/Types.hpp
-        common/TTLCache.hpp
-        common/IceHandler.hpp
-        common/ThreadManager.hpp
-        common/Contexts.hpp
-        common/Stream.hpp
-        app/Main.cpp
-)
+
 
 add_executable(thru
         app/Main.cpp
-
         server/ServerConfig.hpp
         server/ServerSocketHandler.hpp
         server/TransferSession.hpp
@@ -53,7 +42,14 @@ add_executable(thru
         receiver/ReceiverContexts.hpp
         receiver/ReceiverEntryPoint.hpp
 
-        ${COMMON_SOURCES}
+        common/Utils.hpp
+        common/Payloads.hpp
+        common/Types.hpp
+        common/TTLCache.hpp
+        common/IceHandler.hpp
+        common/ThreadManager.hpp
+        common/Contexts.hpp
+        common/Stream.hpp
 )
 
 target_link_libraries(thru PRIVATE
@@ -63,11 +59,11 @@ target_link_libraries(thru PRIVATE
         Boost::url
         Boost::boost
         OpenSSL::Crypto
-        PkgConfig::NICE
         indicators::indicators
         ixwebsocket::ixwebsocket
         lsquic::lsquic
         BLAKE3::blake3
         unofficial::uwebsockets::uwebsockets
         MbedTLS::mbedtls
+        PkgConfig::NICE
 )

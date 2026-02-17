@@ -1,3 +1,5 @@
 build
 out.bin
 random_file.bin
+build_linux
+build_windows
