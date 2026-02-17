@@ -152,22 +152,17 @@ namespace common {
             }
 
             for (int i = 1; i <= n; i++) {
-                nice_agent_set_port_range(agent, stream_id, i, 55000, 55100);
+                nice_agent_set_port_range(agent, stream_id, i, 49152, 65535);
                 nice_agent_attach_recv(agent, stream_id, i, ThreadManager::getContext(),
                                        [](NiceAgent *, guint, guint, guint, gchar *, gpointer) {
                                        }, nullptr);
             }
             for (const auto &turn: turnServers_) {
                 for (int i = 1; i <= n; i++) {
-                    if (strcmp(turn.host.c_str(),"stun.bytepipe.app") == 0) {
-                        continue;
-                    }
                     spdlog::info("{} {} {} {}", turn.host.c_str(), turn.port,
                                  turn.username.c_str(),
                                  turn.password.c_str());
-
-
-                    nice_agent_set_relay_info(agent, stream_id, i, turn.host.c_str(), turn.port,
+                    nice_agent_set_relay_info(agent, stream_id, i, "45.143.198.164", turn.port,
                                               turn.username.c_str(),
                                               turn.password.c_str(), NICE_RELAY_TYPE_TURN_UDP);
                 }
