@@ -82,6 +82,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf build
+          if [ "${{ runner.os }}" = "Windows" ]; then
           cmake -S . -B build \
             -DCMAKE_TOOLCHAIN_FILE="${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
