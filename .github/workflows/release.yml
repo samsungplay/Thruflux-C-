@@ -16,19 +16,28 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             triplet: x64-linux
             asset_ext: tar.gz
+            platform: linux-x64
             vcpkg_commit: fb87e2bb3fe69e16c224989acb5a61349166c782
 
-          - os: macos-latest
+          - os: macos-14
             triplet: arm64-osx
+            platform: macos-arm64
             asset_ext: tar.gz
             vcpkg_commit: fb87e2bb3fe69e16c224989acb5a61349166c782
 
-          - os: windows-latest
+          - os: macos-13
+            triplet: x64-osx
+            platform: macos-x64
+            asset_ext: tar.gz
+            vcpkg_commit: fb87e2bb3fe69e16c224989acb5a61349166c782
+
+          - os: windows-2022
             triplet: x64-windows-static
             asset_ext: zip
+            platform: windows-x64
             vcpkg_commit: fb87e2bb3fe69e16c224989acb5a61349166c782
 
     env:
@@ -121,7 +130,7 @@ jobs:
           echo "Found binary at: $BIN_PATH"
           cp "$BIN_PATH" dist/
 
-          ASSET="thruflux-${TAG}-${{ runner.os }}-${{ matrix.triplet }}.${{ matrix.asset_ext }}"
+          ASSET="thruflux-${TAG}-${{ matrix.platform }}.${{ matrix.asset_ext }}"
 
           if [ "${{ runner.os }}" = "Windows" ]; then
             7z a "$ASSET" ./dist/*
