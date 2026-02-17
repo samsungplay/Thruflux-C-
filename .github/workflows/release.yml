@@ -94,9 +94,9 @@ jobs:
           set -euo pipefail
           rm -rf build
           if [ "${{ runner.os }}" = "Windows" ]; then
-            cmake -S . -B build ^
-            -DCMAKE_TOOLCHAIN_FILE="%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake" ^
-            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} ^
+            cmake -S . -B build \
+            -DCMAKE_TOOLCHAIN_FILE="%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
             -DCMAKE_BUILD_TYPE=Release
           else
           cmake -S . -B build -G Ninja \
