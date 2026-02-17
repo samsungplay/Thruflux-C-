@@ -57,12 +57,9 @@ jobs:
           set -euo pipefail
           if [ "${{ runner.os }}" = "Linux" ]; then
             sudo apt-get update
-           sudo apt-get install -y nasm pkg-config build-essential ninja-build g++-12
-          
+           sudo apt-get install -y nasm pkg-config build-essential ninja-build
             sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 100 \
           --slave /usr/bin/g++ g++ /usr/bin/g++-12
-            echo "CC=gcc-13" >> $GITHUB_ENV
-            echo "CXX=g++-13" >> $GITHUB_ENV
           elif [ "${{ runner.os }}" = "macOS" ]; then
             brew update
             brew install nasm pkg-config ninja
@@ -88,6 +85,13 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
             -DCMAKE_BUILD_TYPE=Release
+          else
+          cmake -S . -B build -G Ninja \
+          -DCMAKE_TOOLCHAIN_FILE="${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" \
+          -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+          fi
 
       - name: Build
         shell: bash
