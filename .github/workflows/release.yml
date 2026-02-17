@@ -28,7 +28,7 @@ jobs:
             asset_ext: tar.gz
             vcpkg_commit: fb87e2bb3fe69e16c224989acb5a61349166c782
 
-          - os: macos-13
+          - os: macos-15-intel
             triplet: x64-osx
             platform: macos-x64
             asset_ext: tar.gz
@@ -40,23 +40,9 @@ jobs:
             platform: windows-x64
             vcpkg_commit: fb87e2bb3fe69e16c224989acb5a61349166c782
 
-    env:
-      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg_binary_cache,readwrite"
-      VCPKG_FEATURE_FLAGS: "manifests,binarycaching"
-      VCPKG_DISABLE_METRICS: "1"
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Cache vcpkg binary packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ github.workspace }}/vcpkg_binary_cache
-          key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}-${{ matrix.vcpkg_commit }}
-          restore-keys: |
-            vcpkg-${{ runner.os }}-${{ matrix.triplet }}-
 
       - name: Setup sccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -95,7 +81,7 @@ jobs:
           rm -rf build
           if [ "${{ runner.os }}" = "Windows" ]; then
             cmake -S . -B build \
-            -DCMAKE_TOOLCHAIN_FILE="%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake" \
+            -DCMAKE_TOOLCHAIN_FILE="${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
             -DCMAKE_BUILD_TYPE=Release
           else
@@ -110,7 +96,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cmake --build build --config Release -j$(nproc 2>/dev/null || sysctl -n hw.ncpu || echo 2)
+          cmake --build build --config Release --parallel
 
       - name: Package Binary
         shell: bash
