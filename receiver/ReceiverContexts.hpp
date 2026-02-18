@@ -3,6 +3,18 @@
 
 #include "ReceiverConfig.hpp"
 #include "../common/Contexts.hpp"
+#ifdef _MSC_VER
+  #include <intrin.h>
+  #pragma intrinsic(__popcnt)
+  static inline int popcount32(unsigned int x) {
+      return (int)__popcnt(x);
+  }
+#else
+static int popcount32(unsigned int x) {
+      return __builtin_popcount(x);
+  }
+#endif
+
 
 namespace receiver {
     struct ReceiverConnectionContext : common::ConnectionContext {
@@ -140,11 +152,11 @@ namespace receiver {
                     const uint32_t remBits = totalChunks % 8;
 
                     for (uint64_t i = 0; i < fullBytes; ++i)
-                        resumedChunks += __builtin_popcount(resumeBitmap[i]);
+                        resumedChunks += popcount32(resumeBitmap[i]);
 
                     if (remBits) {
                         const uint8_t mask = (1u << remBits) - 1u;
-                        resumedChunks += __builtin_popcount(static_cast<unsigned>(resumeBitmap[fullBytes] & mask));
+                        resumedChunks += popcount32(static_cast<unsigned>(resumeBitmap[fullBytes] & mask));
                     }
 
                     const double percent =
