@@ -8,6 +8,17 @@
 #include <indicators/progress_bar.hpp>
 #include <spdlog/spdlog.h>
 
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+typedef int mode_t;
+#define O_RDONLY _O_RDONLY
+#define O_WRONLY _O_WRONLY
+#define O_RDWR _O_RDWR
+#define S_IRUSR _S_IREAD
+#define S_IWUSR _S_IWRITE
+#endif
+
 
 namespace common {
     inline constexpr char RECEIVER_MANIFEST_RECEIVED_ACK = 0x06;
