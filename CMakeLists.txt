@@ -24,6 +24,7 @@ find_package(OpenSSL REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(ixwebsocket CONFIG REQUIRED)
 find_package(Boost REQUIRED COMPONENTS url)
+find_package(llfio CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(lsquic CONFIG REQUIRED)
 find_package(indicators CONFIG REQUIRED)
@@ -77,4 +78,5 @@ target_link_libraries(thru PRIVATE
         unofficial::uwebsockets::uwebsockets
         MbedTLS::mbedtls
         PkgConfig::NICE
+        llfio::sl
 )

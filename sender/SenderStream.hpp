@@ -321,6 +321,9 @@ namespace sender {
 
             .on_close = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
                 const auto *ctx = reinterpret_cast<SenderStreamContext *>(h);
+                if (ctx->pinnedFileId != UINT32_MAX) {
+                    senderPersistentContext.cache.release(ctx->pinnedFileId);
+                }
                 delete ctx;
             },
 

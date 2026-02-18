@@ -278,9 +278,8 @@ namespace receiver {
         uint32_t fileId = 0;
         uint8_t writeBuffer[1024 * 1024];
         blake3_hasher hasher;
-        int fd = -1;
-        uint32_t fdFileId = UINT32_MAX;
-
+        uint32_t pinnedFileId = UINT32_MAX;
+        llfio::file_handle* pinnedHandle = nullptr;
 
     };
 }

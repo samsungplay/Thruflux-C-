@@ -8,6 +8,8 @@
 #include <indicators/progress_bar.hpp>
 #include <spdlog/spdlog.h>
 
+#include <llfio/llfio.hpp>
+
 #ifdef _WIN32
 #include <io.h>
 #include <fcntl.h>
@@ -19,6 +21,7 @@ typedef int mode_t;
 #define S_IWUSR _S_IWRITE
 #endif
 
+namespace llfio = LLFIO_V2_NAMESPACE;
 
 namespace common {
     inline constexpr char RECEIVER_MANIFEST_RECEIVED_ACK = 0x06;
@@ -27,8 +30,9 @@ namespace common {
 
     struct FileHandleCache {
         struct Entry {
-            int fd = -1;
+            llfio::file_handle fh{};
             bool open = false;
+            uint32_t pinCount = 0;
             int prev = -1;
             int next = -1;
         };
@@ -50,8 +54,10 @@ namespace common {
         void reset(size_t fileCount, size_t maxFds_ = 128) {
             closeAll();
             maxFds = maxFds_;
-            paths.assign(fileCount, {});
-            entries.assign(fileCount, {});
+            paths.clear();
+            paths.resize(fileCount);
+            entries.clear();
+            entries.resize(fileCount);
             head = tail = -1;
             openCount = 0;
         }
@@ -64,51 +70,82 @@ namespace common {
             paths[id] = std::move(p);
         }
 
-        int get(uint32_t id, int flags, mode_t mode = 0) {
-            if (id >= entries.size() || id >= paths.size()) {
-                spdlog::error("FileHandleCache: id {} out of range", id);
-                return -1;
-            }
-            if (paths[id].empty()) {
-                spdlog::error("FileHandleCache: path not registered for id {}", id);
-                return -1;
-            }
+        llfio::file_handle* acquire(uint32_t id, bool write = false) {
+            if (id >= entries.size() || id >= paths.size() || paths[id].empty()) return nullptr;
 
             Entry &e = entries[id];
-            if (e.open && e.fd != -1) {
-                touch((int) id);
-                return e.fd;
+
+            if (e.open && e.fh.is_valid()) {
+                ++e.pinCount;
+                touch((int)id);
+                return &e.fh;
             }
 
             while (openCount >= maxFds) {
                 if (!evictOne()) break;
             }
+
             if (openCount >= maxFds) {
-                spdlog::error("FileHandleCache: cannot evict (maxFds={})", maxFds);
-                return -1;
+                spdlog::error("FileHandleCache: cannot evict maxFds={}", maxFds);
+                return nullptr;
             }
 
-            const int fd = ::open(paths[id].c_str(), flags, mode);
-            if (fd == -1) {
-                spdlog::error("Failed to open file id {} path='{}' errno={}", id, paths[id], errno);
-                return -1;
+            auto opened = write ? llfio::file({},paths[id], llfio::file_handle::mode::write, llfio::file_handle::creation::if_needed) : llfio::file({}, paths[id]);
+            if (!opened) {
+                spdlog::error("Failed to open file id {} path='{}' err={}", id, paths[id], opened.error().message());
+                return nullptr;
             }
 
-            if (e.prev != -1 || e.next != -1 || head == (int) id || tail == (int) id) {
-                removeFromList((int) id);
-            }
+            if (e.prev != -1 || e.next != -1 || head == (int)id || tail == (int)id)
+                removeFromList((int)id);
 
-            e.fd = fd;
+            e.fh = std::move(opened).value();
             e.open = true;
-            pushFront((int) id);
-            openCount++;
-            return fd;
+            e.pinCount = 1;
+            pushFront((int)id);
+            ++openCount;
+            return &e.fh;
         }
 
+        void release(uint32_t id) {
+            if (id >= entries.size()) return;
+            Entry &e = entries[id];
+            if (e.pinCount > 0) --e.pinCount;
+        }
+
+        bool evictOne() {
+            int cur = tail;
+            while (cur != -1) {
+                Entry &e = entries[static_cast<size_t>(cur)];
+                if (e.open && e.fh.is_valid() && e.pinCount == 0) {
+                    auto r = e.fh.close();
+                    if (!r) spdlog::warn("failed to close {} : {}", paths[cur], r.error().message());
+
+                    e.fh = llfio::file_handle{};
+                    e.open = false;
+
+                    removeFromList(cur);
+                    --openCount;
+
+                    return true;
+                }
+                cur = e.prev;
+            }
+            return false;
+        }
+
+
         void closeAll() {
-            for (auto &e: entries) {
-                if (e.open && e.fd != -1) ::close(e.fd);
-                e = Entry{};
+            for (size_t i = 0; i < entries.size(); ++i) {
+                auto &e = entries[i];
+                if (e.open && e.fh.is_valid()) {
+                    auto r = e.fh.close();
+                    if (!r) spdlog::warn("close('{}') failed: {}", paths[i], r.error().message());
+                }
+                e.fh = llfio::file_handle{};
+                e.open = false;
+                e.pinCount = 0;
+                e.prev = e.next = -1;
             }
             head = tail = -1;
             openCount = 0;
@@ -118,26 +155,18 @@ namespace common {
 
     private:
         void removeFromList(int id) {
-            if (id < 0 || (size_t) id >= entries.size()) return;
+            if (id == -1) return;
             Entry &e = entries[id];
-            if (e.prev == -1 && e.next == -1 && head != id && tail != id) {
-                e.prev = e.next = -1;
-                return;
-            }
 
-            const int p = e.prev;
-            const int n = e.next;
+            if (e.prev != -1) entries[e.prev].next = e.next;
+            if (e.next != -1) entries[e.next].prev = e.prev;
 
-            if (p != -1) entries[p].next = n;
-            else if (head == id) head = n;
-
-            if (n != -1) entries[n].prev = p;
-            else if (tail == id) tail = p;
-
-            if (head == -1) tail = -1;
+            if (head == id) head = e.next;
+            if (tail == id) tail = e.prev;
 
             e.prev = e.next = -1;
         }
+
 
         void pushFront(int id) {
             Entry &e = entries[id];
@@ -154,19 +183,6 @@ namespace common {
             pushFront(id);
         }
 
-        bool evictOne() {
-            int id = tail;
-            if (id == -1) return false;
-
-            Entry &e = entries[id];
-            if (e.open && e.fd != -1) ::close(e.fd);
-            e.fd = -1;
-            e.open = false;
-
-            removeFromList(id);
-            if (openCount > 0) openCount--;
-            return true;
-        }
     };
 
 

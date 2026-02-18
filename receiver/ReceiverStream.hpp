@@ -10,85 +10,7 @@
 #include "ReceiverContexts.hpp"
 #include "../common/Contexts.hpp"
 #include "../common/Stream.hpp"
-
-#ifdef _WIN32
-
-#include <windows.h>
-#include <io.h>
-#include <errno.h>
-#include <stdint.h>
-#include <BaseTsd.h>
-
-#ifndef _SSIZE_T_DEFINED
-typedef SSIZE_T ssize_t;
-#define _SSIZE_T_DEFINED
-#endif
-
-static inline ssize_t pwrite(int fd, const void *buf, size_t count, int64_t offset)
-{
-    if (count == 0) return 0;
-    if (buf == NULL) { errno = EINVAL; return -1; }
-    if (offset < 0)  { errno = EINVAL; return -1; }
-
-    intptr_t osfh = _get_osfhandle(fd);
-    if (osfh == (intptr_t)INVALID_HANDLE_VALUE) {
-        errno = EBADF;
-        return -1;
-    }
-
-    HANDLE h = (HANDLE)osfh;
-
-    DWORD ft = GetFileType(h);
-    if (ft != FILE_TYPE_DISK) {
-        errno = ESPIPE;
-        return -1;
-    }
-
-    size_t total = 0;
-    const uint8_t *p = (const uint8_t *)buf;
-
-    while (total < count) {
-        DWORD to_write = (DWORD)((count - total) > (size_t)MAXDWORD ? MAXDWORD : (count - total));
-
-        OVERLAPPED ov;
-        ZeroMemory(&ov, sizeof(ov));
-
-        uint64_t off = (uint64_t)offset + (uint64_t)total;
-        ov.Offset     = (DWORD)(off & 0xFFFFFFFFu);
-        ov.OffsetHigh = (DWORD)((off >> 32) & 0xFFFFFFFFu);
-
-        DWORD put = 0;
-        BOOL ok = WriteFile(h, p + total, to_write, &put, &ov);
-
-        if (!ok) {
-            DWORD e = GetLastError();
-            switch (e) {
-                case ERROR_INVALID_HANDLE:
-                    errno = EBADF; break;
-                case ERROR_ACCESS_DENIED:
-                    errno = EACCES; break;
-                case ERROR_NOT_ENOUGH_MEMORY:
-                case ERROR_OUTOFMEMORY:
-                    errno = ENOMEM; break;
-                case ERROR_INVALID_PARAMETER:
-                    errno = EINVAL; break;
-                case ERROR_DISK_FULL:
-                    errno = ENOSPC; break;
-                default:
-                    errno = EIO; break;
-            }
-            return -1;
-        }
-
-        total += (size_t)put;
-
-        if (put == 0) break;
-    }
-
-    return (ssize_t)total;
-}
-
-#endif
+#include <llfio/llfio.hpp>
 
 namespace receiver {
     class ReceiverStream : public common::Stream {
@@ -355,9 +277,18 @@ namespace receiver {
                             memcpy(&ctx->chunkOffset, ctx->headerBuf, 8);
                             memcpy(&ctx->chunkLength, ctx->headerBuf + 8, 4);
                             memcpy(&ctx->fileId, ctx->headerBuf + 12, 4);
-                            if (ctx->fd == -1 || ctx->fdFileId != ctx->fileId) {
-                                ctx->fd = connCtx->cache.get(ctx->fileId, O_WRONLY | O_CREAT, 0644);
-                                ctx->fdFileId = ctx->fileId;
+                            if (ctx->pinnedFileId != ctx->fileId) {
+                                if (ctx->pinnedFileId != UINT32_MAX) {
+                                    connCtx->cache.release(ctx->pinnedFileId);
+                                }
+                                ctx->pinnedFileId = ctx->fileId;
+                                ctx->pinnedHandle = connCtx->cache.acquire(ctx->fileId, true);
+                                if (!ctx->pinnedHandle) {
+                                    spdlog::error("Failed to acquire file handle for fileId {} path='{}'",
+                                                  ctx->fileId, connCtx->cache.paths[ctx->fileId]);
+                                    lsquic_stream_close(stream);
+                                    return;
+                                }
                             }
                             ctx->readingHeader = false;
                             ctx->bodyBytesRead = 0;
@@ -372,23 +303,39 @@ namespace receiver {
                             break;
                         }
 
-
-                        const int fd = ctx->fd;
-                        if (fd == -1) {
-                            spdlog::error("Unexpected error: Could not get fd");
+                        if (!ctx->pinnedHandle) {
+                            spdlog::error("No pinned file handle");
                             lsquic_stream_close(stream);
                             return;
                         }
 
-                        uint64_t writePos = ctx->chunkOffset + ctx->bodyBytesRead;
-                        ssize_t nw = pwrite(fd, ctx->writeBuffer, nr, writePos);
+                        llfio::byte_io_handle::const_buffer_type reqBuf({
+                            reinterpret_cast<const llfio::byte *>(ctx->writeBuffer),
+                            static_cast<size_t>(nr)
+                        });
+
+                        llfio::file_handle::io_request req(
+                            llfio::file_handle::const_buffers_type{&reqBuf, 1},
+                            ctx->chunkOffset + ctx->bodyBytesRead
+                        );
+
+                        auto result = ctx->pinnedHandle->write(req);
+
+                        if (!result) {
+                            spdlog::error("Could not write file to disk {}", result.error().message());
+                            lsquic_stream_close(stream);
+                            return;
+                        }
+
+                        const auto nw = result.bytes_transferred();
+
+                        if (nw < nr) {
+                            spdlog::error("Unexpected partial write to disk; expected = {} written = {}", nr, nw);
+                            lsquic_stream_close(stream);
+                            return;
+                        }
+
                         connCtx->bytesMoved += nw;
-
-                        if (nw < 0) {
-                            spdlog::error("Could not write to disk: {}", errno);
-                            lsquic_stream_close(stream);
-                            return;
-                        }
 
                         ctx->bodyBytesRead += nw;
 
@@ -473,7 +420,14 @@ namespace receiver {
                 }
             },
             .on_close = [](lsquic_stream_t *stream, lsquic_stream_ctx_t *h) {
-                const auto *ctx = reinterpret_cast<ReceiverStreamContext *>(h);
+                auto *ctx = reinterpret_cast<ReceiverStreamContext *>(h);
+                auto *connCtx = reinterpret_cast<ReceiverConnectionContext *>(lsquic_conn_get_ctx(
+                    lsquic_stream_conn(stream)));
+                if (connCtx && ctx->pinnedFileId != UINT32_MAX) {
+                    connCtx->cache.release(ctx->pinnedFileId);
+                    ctx->pinnedFileId = UINT32_MAX;
+                    ctx->pinnedHandle = nullptr;
+                }
                 delete ctx;
             },
             .on_hsk_done = [](lsquic_conn_t *c, enum lsquic_hsk_status status) {

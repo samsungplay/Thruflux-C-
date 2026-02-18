@@ -2,91 +2,7 @@
 #include <indicators/dynamic_progress.hpp>
 #include "../common/Contexts.hpp"
 #include "../common/Stream.hpp"
-#include "blake3.h"
-
-#ifdef _WIN32
-
-#include <windows.h>
-#include <io.h>
-#include <errno.h>
-#include <stdint.h>
-#include <BaseTsd.h>
-
-#ifndef _SSIZE_T_DEFINED
-typedef SSIZE_T ssize_t;
-#define _SSIZE_T_DEFINED
-#endif
-
-static inline ssize_t pread(int fd, void *buf, size_t count, int64_t offset)
-{
-    if (count == 0) return 0;
-    if (buf == NULL) { errno = EINVAL; return -1; }
-    if (offset < 0)  { errno = EINVAL; return -1; }
-
-    intptr_t osfh = _get_osfhandle(fd);
-    if (osfh == (intptr_t)INVALID_HANDLE_VALUE) {
-        errno = EBADF;
-        return -1;
-    }
-
-    HANDLE h = (HANDLE)osfh;
-
-    DWORD ft = GetFileType(h);
-    if (ft != FILE_TYPE_DISK) {
-        errno = ESPIPE;
-        return -1;
-    }
-
-    size_t total = 0;
-    uint8_t *p = (uint8_t *)buf;
-
-    while (total < count) {
-        DWORD to_read = (DWORD)((count - total) > (size_t)MAXDWORD ? MAXDWORD : (count - total));
-
-        OVERLAPPED ov;
-        ZeroMemory(&ov, sizeof(ov));
-
-        uint64_t off = (uint64_t)offset + (uint64_t)total;
-        ov.Offset     = (DWORD)(off & 0xFFFFFFFFu);
-        ov.OffsetHigh = (DWORD)((off >> 32) & 0xFFFFFFFFu);
-
-        DWORD got = 0;
-        BOOL ok = ReadFile(h, p + total, to_read, &got, &ov);
-
-        if (!ok) {
-            DWORD e = GetLastError();
-
-            switch (e) {
-                case ERROR_HANDLE_EOF:
-                    return (ssize_t)total;
-                case ERROR_INVALID_HANDLE:
-                    errno = EBADF;
-                    break;
-                case ERROR_ACCESS_DENIED:
-                    errno = EACCES;
-                    break;
-                case ERROR_NOT_ENOUGH_MEMORY:
-                case ERROR_OUTOFMEMORY:
-                    errno = ENOMEM;
-                    break;
-                case ERROR_INVALID_PARAMETER:
-                    errno = EINVAL;
-                    break;
-                default:
-                    errno = EIO;
-                    break;
-            }
-            return -1;
-        }
-
-        total += (size_t)got;
-
-        if (got == 0) break;
-    }
-
-    return (ssize_t)total;
-}
-#endif
+#include <llfio/llfio.hpp>
 
 namespace sender {
     struct FileInfo {
@@ -103,10 +19,9 @@ namespace sender {
         int totalExpectedFilesCount;
         std::vector<FileInfo> files;
         std::vector<uint8_t> manifestBlob;
-        const size_t MAX_MMAPS = 128;
         std::list<std::unique_ptr<indicators::ProgressBar> > progressBarsStorage;
         indicators::DynamicProgress<indicators::ProgressBar> progressBars;
-        std::vector<int> fileFds;
+        common::FileHandleCache cache;
 
 
         SenderPersistentContext() {
@@ -198,7 +113,10 @@ namespace sender {
             for (uint32_t i = 0; i < files.size(); ++i) {
                 files[i].id = i;
             }
-            fileFds.assign(files.size(), -1);
+
+            cache.reset(files.size());
+            for (auto &f : files) cache.registerPath(f.id, f.path);
+
 
             std::string stats = std::to_string(filesCount) + " file(s), " + common::Utils::sizeToReadableFormat(
                                     totalSize);
@@ -243,33 +161,12 @@ namespace sender {
         }
 
 
-        int getFd(uint32_t id) {
-            if (id >= files.size()) return -1;
-            int &fd = fileFds[id];
-            if (fd != -1) return fd;
-            fd = open(files[id].path.c_str(), O_RDONLY);
-            if (fd == -1) {
-                spdlog::error("Failed to open file {}: errno={}", files[id].path, errno);
-                return -1;
-            }
-#if defined(__linux__)
-            posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
-#endif
-            return fd;
-        }
+
 
         int addNewProgressBar(std::string prefix) {
             progressBarsStorage.push_back(common::Utils::createProgressBarUniquePtr(std::move(prefix)));
             const size_t id = progressBars.push_back(*progressBarsStorage.back());
             return id;
-        }
-
-        void dispose() {
-            for (int &fd : fileFds) {
-                if (fd != -1) {
-                    close(fd); fd = -1;
-                }
-            }
         }
     };
 
@@ -295,7 +192,6 @@ namespace sender {
         SenderConnectionContext *connectionContext = nullptr;
         bool typeByteSent = false;
         bool isManifestStream = false;
-        int currentFd = -1;
         std::vector<uint8_t> readBuf;
         uint32_t fileId = 0;
         uint64_t offset = 0;
@@ -305,6 +201,8 @@ namespace sender {
         bool sendingHeader = false;
         uint8_t headerSent = 0;
         int id = 0;
+        uint32_t pinnedFileId = UINT32_MAX;
+        llfio::file_handle* pinnedHandle = nullptr;
 
         bool loadNextChunk() {
             while (true) {
@@ -321,6 +219,11 @@ namespace sender {
                     connectionContext->currentFileIndex++;
                     connectionContext->filesMoved++;
                     connectionContext->currentFileOffset = 0;
+                    if (pinnedFileId != UINT32_MAX) {
+                        senderPersistentContext.cache.release(pinnedFileId);
+                        pinnedFileId = UINT32_MAX;
+                        pinnedHandle = nullptr;
+                    }
                     continue;
                 }
 
@@ -342,29 +245,44 @@ namespace sender {
                 len = std::min(common::CHUNK_SIZE, f.size - off);
                 bytesSent = 0;
 
-                currentFd = senderPersistentContext.getFd(fileId);
+                if (pinnedFileId != fileId) {
+                    if (pinnedFileId != UINT32_MAX) {
+                        senderPersistentContext.cache.release(pinnedFileId);
+                    }
+                    pinnedFileId = fileId;
+                    pinnedHandle = senderPersistentContext.cache.acquire(fileId);
+                }
 
-                if (currentFd == -1) {
+                if (!pinnedHandle) {
                     spdlog::error("Failed to open fd for file ID {}: {}", fileId, f.path);
                     return false;
                 }
 
-                size_t done = 0;
-                while (done < len) {
-                    const ssize_t nr = pread(currentFd,
-                                         readBuf.data() + done,
-                                         len - done,
-                                         static_cast<off_t>(offset + done));
-                    if (nr == 0) {
-                        spdlog::error("Unexpected EOF on fileId {} at offset {}", fileId, offset + done);
-                        return false;
-                    }
-                    if (nr < 0) {
-                        if (errno == EINTR) continue;
-                        spdlog::error("pread failed; fileId {}, Error : {}", fileId, errno);
-                        return false;
-                    }
-                    done += static_cast<size_t>(nr);
+
+                llfio::byte_io_handle::buffer_type reqBuf({
+                    reinterpret_cast<llfio::byte *>(readBuf.data()),
+                    len
+                });
+
+                const llfio::file_handle::io_request req(
+                    llfio::file_handle::buffers_type{&reqBuf, 1},
+                    offset
+                );
+
+                auto result = pinnedHandle->read(req);
+
+                if (!result) {
+                    spdlog::error("Failed to read file with fileId {}: {}", fileId, result.error().message());
+                    return false;
+                }
+
+
+                const auto bytesRead = result.bytes_transferred();
+
+                if (bytesRead < len) {
+                    spdlog::error("Unexpected EOF on fileId {} at offset {}. Read {}/{} bytes",
+                                  fileId, offset + bytesRead, bytesRead, len);
+                    return false;
                 }
 
                 memcpy(headerBuf, &offset, 8);
