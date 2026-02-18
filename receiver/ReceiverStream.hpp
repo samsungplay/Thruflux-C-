@@ -13,7 +13,6 @@
 
 #ifdef _WIN32
 
-#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <io.h>
 #include <errno.h>
@@ -49,7 +48,7 @@ static inline ssize_t pwrite(int fd, const void *buf, size_t count, int64_t offs
     const uint8_t *p = (const uint8_t *)buf;
 
     while (total < count) {
-        DWORD to_write = (DWORD)((count - total) > (size_t)DWORD_MAX ? DWORD_MAX : (count - total));
+        DWORD to_write = (DWORD)((count - total) > (size_t)MAXDWORD ? MAXDWORD : (count - total));
 
         OVERLAPPED ov;
         ZeroMemory(&ov, sizeof(ov));

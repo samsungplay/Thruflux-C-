@@ -6,7 +6,6 @@
 
 #ifdef _WIN32
 
-#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <io.h>
 #include <errno.h>
@@ -42,7 +41,7 @@ static inline ssize_t pread(int fd, void *buf, size_t count, int64_t offset)
     uint8_t *p = (uint8_t *)buf;
 
     while (total < count) {
-        DWORD to_read = (DWORD)((count - total) > (size_t)DWORD_MAX ? DWORD_MAX : (count - total));
+        DWORD to_read = (DWORD)((count - total) > (size_t)MAXDWORD ? MAXDWORD : (count - total));
 
         OVERLAPPED ov;
         ZeroMemory(&ov, sizeof(ov));
