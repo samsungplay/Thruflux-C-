@@ -13,18 +13,25 @@ vcpkg_replace_string(
 	"werror = false"
 )
 
-# Strip /Zi (and -Zi) from any env flags passed into Meson by vcpkg/toolchain
-foreach(_var IN ITEMS CFLAGS CXXFLAGS CPPFLAGS)
-    if(DEFINED ENV{${_var}})
-        set(_tmp "$ENV{${_var}}")
-        string(REGEX REPLACE "(^|[ \t])[-/]Zi([ \t]|$)" " " _tmp "${_tmp}")
-        string(REGEX REPLACE "[ \t]+" " " _tmp "${_tmp}")
-        string(STRIP "${_tmp}" _tmp)
-        set(ENV{${_var}} "${_tmp}")
-    endif()
-endforeach()
+set(MESON_COMMON_OPTS "")
+set(MESON_DEBUG_OPTS "")
+set(MESON_RELEASE_OPTS "")
 
-
+if(VCPKG_TARGET_IS_WINDOWS)
+  # MSVC/Windows-only flags
+  list(APPEND MESON_COMMON_OPTS
+    "-Dc_args=['/DWIN32_LEAN_AND_MEAN','/Zc:preprocessor','/DNOCRYPT']"
+    "-Dcpp_args=['/DWIN32_LEAN_AND_MEAN','/Zc:preprocessor','/DNOCRYPT']"
+  )
+  list(APPEND MESON_DEBUG_OPTS
+    "-Dc_args=['/DWIN32_LEAN_AND_MEAN','/Zc:preprocessor','/DNOCRYPT','/Z7']"
+    "-Dcpp_args=['/DWIN32_LEAN_AND_MEAN','/Zc:preprocessor','/DNOCRYPT','/Z7']"
+  )
+  list(APPEND MESON_RELEASE_OPTS
+    "-Dc_args=['/DWIN32_LEAN_AND_MEAN','/Zc:preprocessor','/DNOCRYPT']"
+    "-Dcpp_args=['/DWIN32_LEAN_AND_MEAN','/Zc:preprocessor','/DNOCRYPT']"
+  )
+endif()
 
 vcpkg_configure_meson(
     SOURCE_PATH "${SOURCE_PATH}"
@@ -39,16 +46,11 @@ vcpkg_configure_meson(
         -Dexamples=disabled
         -Dgstreamer=disabled
         -Dcrypto-library=openssl
-        # Use comma-separated arrays for Meson flags
-        "-Dc_args=['/DWIN32_LEAN_AND_MEAN', '/Zc:preprocessor', '/DNOCRYPT']"
-        "-Dcpp_args=['/DWIN32_LEAN_AND_MEAN', '/Zc:preprocessor', '/DNOCRYPT']"
+        ${MESON_COMMON_OPTS}
     OPTIONS_DEBUG
-        "-Dc_args=['/DWIN32_LEAN_AND_MEAN', '/Zc:preprocessor', '/DNOCRYPT', '/Z7']"
-        "-Dcpp_args=['/DWIN32_LEAN_AND_MEAN', '/Zc:preprocessor', '/DNOCRYPT', '/Z7']"
+        ${MESON_DEBUG_OPTS}
     OPTIONS_RELEASE
-        # DO NOT leave these empty; repeat the core flags here
-        "-Dc_args=['/DWIN32_LEAN_AND_MEAN', '/Zc:preprocessor', '/DNOCRYPT']"
-        "-Dcpp_args=['/DWIN32_LEAN_AND_MEAN', '/Zc:preprocessor', '/DNOCRYPT']"
+        ${MESON_RELEASE_OPTS}
     ADDITIONAL_BINARIES
         glib-genmarshal='${CURRENT_HOST_INSTALLED_DIR}/tools/glib/glib-genmarshal'
         glib-mkenums='${CURRENT_HOST_INSTALLED_DIR}/tools/glib/glib-mkenums'
