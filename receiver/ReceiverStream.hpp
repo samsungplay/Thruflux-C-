@@ -381,8 +381,7 @@ namespace receiver {
                         }
 
                         uint64_t writePos = ctx->chunkOffset + ctx->bodyBytesRead;
-                        // ssize_t nw = pwrite(fd, ctx->writeBuffer, nr, writePos);
-                        const auto nw = nr;
+                        ssize_t nw = pwrite(fd, ctx->writeBuffer, nr, writePos);
                         connCtx->bytesMoved += nw;
 
                         if (nw < 0) {
