@@ -1,7 +1,5 @@
 #pragma once
 #include <indicators/dynamic_progress.hpp>
-#include <sys/mman.h>
-
 #include "../common/Contexts.hpp"
 #include "../common/Stream.hpp"
 #include "blake3.h"
