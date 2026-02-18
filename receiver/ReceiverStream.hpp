@@ -11,6 +11,85 @@
 #include "../common/Contexts.hpp"
 #include "../common/Stream.hpp"
 
+#ifdef _WIN32
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <io.h>
+#include <errno.h>
+#include <stdint.h>
+#include <BaseTsd.h>
+
+#ifndef _SSIZE_T_DEFINED
+typedef SSIZE_T ssize_t;
+#define _SSIZE_T_DEFINED
+#endif
+
+static inline ssize_t pwrite(int fd, const void *buf, size_t count, int64_t offset)
+{
+    if (count == 0) return 0;
+    if (buf == NULL) { errno = EINVAL; return -1; }
+    if (offset < 0)  { errno = EINVAL; return -1; }
+
+    intptr_t osfh = _get_osfhandle(fd);
+    if (osfh == (intptr_t)INVALID_HANDLE_VALUE) {
+        errno = EBADF;
+        return -1;
+    }
+
+    HANDLE h = (HANDLE)osfh;
+
+    DWORD ft = GetFileType(h);
+    if (ft != FILE_TYPE_DISK) {
+        errno = ESPIPE;
+        return -1;
+    }
+
+    size_t total = 0;
+    const uint8_t *p = (const uint8_t *)buf;
+
+    while (total < count) {
+        DWORD to_write = (DWORD)((count - total) > (size_t)DWORD_MAX ? DWORD_MAX : (count - total));
+
+        OVERLAPPED ov;
+        ZeroMemory(&ov, sizeof(ov));
+
+        uint64_t off = (uint64_t)offset + (uint64_t)total;
+        ov.Offset     = (DWORD)(off & 0xFFFFFFFFu);
+        ov.OffsetHigh = (DWORD)((off >> 32) & 0xFFFFFFFFu);
+
+        DWORD put = 0;
+        BOOL ok = WriteFile(h, p + total, to_write, &put, &ov);
+
+        if (!ok) {
+            DWORD e = GetLastError();
+            switch (e) {
+                case ERROR_INVALID_HANDLE:
+                    errno = EBADF; break;
+                case ERROR_ACCESS_DENIED:
+                    errno = EACCES; break;
+                case ERROR_NOT_ENOUGH_MEMORY:
+                case ERROR_OUTOFMEMORY:
+                    errno = ENOMEM; break;
+                case ERROR_INVALID_PARAMETER:
+                    errno = EINVAL; break;
+                case ERROR_DISK_FULL:
+                    errno = ENOSPC; break;
+                default:
+                    errno = EIO; break;
+            }
+            return -1;
+        }
+
+        total += (size_t)put;
+
+        if (put == 0) break;
+    }
+
+    return (ssize_t)total;
+}
+
+#endif
 
 namespace receiver {
     class ReceiverStream : public common::Stream {
