@@ -57,7 +57,7 @@ namespace server {
             app->add_option(
                         "--ws-connections-per-min",
                         wsConnectionsPerMin,
-                        "New websocket connections allowed per minute (0 disables).")
+                        "New websocket connections allowed per minute.")
                     ->capture_default_str()
                     ->check(CLI::Range(0, 10'000'000));
 
@@ -71,7 +71,7 @@ namespace server {
             app->add_option(
                         "--ws-messages-per-sec",
                         wsMessagesPerSec,
-                        "Websocket messages allowed per second per process (0 disables).")
+                        "Websocket messages allowed per second per process.")
                     ->capture_default_str()
                     ->check(CLI::Range(0, 10'000'000));
 
@@ -109,9 +109,8 @@ namespace server {
                 [](const std::string &s) -> std::string {
                     if (s.empty()) return {};
                     const bool ok =
-                            (s.rfind("turn://", 0) == 0) ||
-                            (s.rfind("turns://", 0) == 0);
-                    if (!ok) return "must start with turn://, turns://, or turn:";
+                            (s.rfind("turn://", 0) == 0);
+                    if (!ok) return "must start with turn://";
                     return {};
                 },
                 "TURN_URL"

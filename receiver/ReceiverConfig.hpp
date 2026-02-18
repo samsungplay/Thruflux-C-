@@ -40,9 +40,8 @@ namespace receiver {
                 [](const std::string &s) -> std::string {
                     if (s.empty()) return "cannot be empty";
                     const bool ok =
-                            (s.rfind("stun://", 0) == 0) ||
-                            (s.rfind("stuns://", 0) == 0);
-                    if (!ok) return "must start with stun:// or stuns://";
+                            (s.rfind("stun://", 0) == 0);
+                    if (!ok) return "must start with stun://";
 
                     return {};
                 },
@@ -54,9 +53,8 @@ namespace receiver {
                     if (s.empty()) return {};
 
                     const bool ok =
-                            (s.rfind("turn://", 0) == 0) ||
-                            (s.rfind("turns://", 0) == 0);
-                    if (!ok) return "must start with turn://, turns://, or turn:";
+                            (s.rfind("turn://", 0) == 0);
+                    if (!ok) return "must start with turn://";
 
                     return {};
                 },
