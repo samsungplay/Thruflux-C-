@@ -113,11 +113,11 @@ namespace common {
         createProgressBarUniquePtr(std::string prefix) {
             return std::make_unique<indicators::ProgressBar>(
                 indicators::option::BarWidth{40},
-                indicators::option::Start{"│"},
-                indicators::option::Fill{"█"},
-                indicators::option::Lead{"█"},
-                indicators::option::Remainder{"·"},
-                indicators::option::End{"│"},
+                indicators::option::Start{"["},
+                indicators::option::Fill{"="},
+                indicators::option::Lead{">"},
+                indicators::option::Remainder{" "},
+                indicators::option::End{"]"},
                 indicators::option::ShowPercentage{true},
                 indicators::option::ShowElapsedTime{true},
                 indicators::option::ShowRemainingTime{true},
