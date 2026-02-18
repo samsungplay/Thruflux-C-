@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
-add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
+add_compile_definitions(BOOST_URL_DISABLE_THREADS)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
