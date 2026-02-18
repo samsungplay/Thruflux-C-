@@ -22,7 +22,7 @@
     "spdlog",
     "uwebsockets",
     "mbedtls",
-     "pkgconf",
+     "pkgconf"
   ],
   "overrides": [
     {
