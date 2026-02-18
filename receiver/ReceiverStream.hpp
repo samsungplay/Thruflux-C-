@@ -1,12 +1,10 @@
 #pragma once
-#include <nice.h>
 #include <lsquic.h>
 #include <openssl/base.h>
 #include <openssl/ssl.h>
 #include <spdlog/spdlog.h>
 #include <openssl/x509.h>
 #include <openssl/pem.h>
-#include <sys/mman.h>
 
 #include "ReceiverConfig.hpp"
 #include "ReceiverContexts.hpp"
