@@ -7,7 +7,6 @@
 #include <string>
 #include <indicators/progress_bar.hpp>
 #include <spdlog/spdlog.h>
-#include <sys/fcntl.h>
 
 
 namespace common {
