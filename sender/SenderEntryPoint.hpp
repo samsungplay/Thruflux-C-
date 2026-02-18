@@ -78,7 +78,6 @@ namespace sender {
 
         sender::SenderStream::dispose();
 
-        senderPersistentContext.dispose();
 
         ix::uninitNetSystem();
         return 0;

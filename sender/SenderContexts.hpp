@@ -264,7 +264,7 @@ namespace sender {
                     len
                 });
 
-                const llfio::file_handle::io_request req(
+                const llfio::file_handle::io_request<llfio::file_handle::buffers_type> req(
                     llfio::file_handle::buffers_type{&reqBuf, 1},
                     offset
                 );

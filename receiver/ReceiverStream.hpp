@@ -314,7 +314,7 @@ namespace receiver {
                             static_cast<size_t>(nr)
                         });
 
-                        llfio::file_handle::io_request req(
+                        llfio::file_handle::io_request<llfio::file_handle::const_buffers_type> req(
                             llfio::file_handle::const_buffers_type{&reqBuf, 1},
                             ctx->chunkOffset + ctx->bodyBytesRead
                         );
