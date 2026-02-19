@@ -342,7 +342,7 @@ namespace receiver {
 
                     ctx->stageLen += static_cast<size_t>(nr);
 
-                    if (ctx->stageLen >= ReceiverStreamContext::FLUSH_AT ||
+                    if (ctx->stageLen >= FLUSH_AT ||
                         (ctx->stageBaseOff + ctx->stageLen) >= ctx->curSize) {
                         if (!ctx->flushStage(connCtx)) {
                             lsquic_stream_close(stream);
