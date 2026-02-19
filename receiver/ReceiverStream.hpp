@@ -235,7 +235,7 @@ namespace receiver {
                                 connCtx->lastManifestProgressPrint = now;
                             }
                         }
-                        if (nr == 0) {
+                        else if (nr == 0) {
                             std::string postfix;
                             postfix.reserve(64);
                             postfix += common::Utils::sizeToReadableFormat((double) connCtx->manifestBuf.size());
@@ -252,10 +252,12 @@ namespace receiver {
                             lsquic_stream_wantread(stream, 0);
                             break;
                         }
-                        if (nr < 0 && errno != 35) {
-                            // spdlog::error("Error while reading manifest stream {}",errno);
-                        } else if (nr < 0) {
-                            break;
+                         else {
+                             if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                                 break;
+                             }
+                             spdlog::error("Unexpected error while reading manifest stream: error code={}", errno);
+                             break;
                         }
                     }
                     return;
