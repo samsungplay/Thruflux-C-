@@ -94,82 +94,84 @@ namespace common {
 
     public:
         inline static lsquic_engine_t *engine;
-        static int sendPackets(void *packetsOutCtx, const lsquic_out_spec *specs, unsigned nSpecs) {
-            if (nSpecs == 0) {
-                return 0;
-            }
+        static int sendPackets(void *packetsOutCtx, const lsquic_out_spec *specs, unsigned nSpecs)
+{
+    if (nSpecs == 0) return 0;
 
-            unsigned totalSent = 0;
-            unsigned i = 0;
+    unsigned totalSent = 0;
 
-            static constexpr unsigned MAX_BATCH = 128;
-            static constexpr unsigned MAX_VECTORS = MAX_BATCH * 8;
-            NiceOutputMessage niceMessages[MAX_BATCH];
-            GOutputVector niceVectors[MAX_VECTORS];
+    for (unsigned i = 0; i < nSpecs; ++i) {
+        const lsquic_out_spec &spec = specs[i];
 
-            while (i < nSpecs) {
-                const auto *ctx = static_cast<ConnectionContext *>(
-                    specs[i].conn_ctx ? specs[i].conn_ctx : specs[i].peer_ctx
-                );
-                if (!ctx) {
-                    i++;
-                    continue;
-                }
-                unsigned batchSize = 0;
-                unsigned vecIdx = 0;
-                while (i + batchSize < nSpecs && batchSize < MAX_BATCH) {
-                    const auto &spec = specs[i + batchSize];
+        auto *ctx = static_cast<ConnectionContext *>(
+            spec.conn_ctx ? spec.conn_ctx : spec.peer_ctx
+        );
 
-                    const void *nextCtxPtr = spec.conn_ctx ? spec.conn_ctx : spec.peer_ctx;
-                    if (nextCtxPtr != ctx) {
-                        break;
-                    }
-
-                    if (vecIdx + spec.iovlen > MAX_VECTORS) {
-                        break;
-                    }
-
-                    niceMessages[batchSize].buffers = &niceVectors[vecIdx];
-                    niceMessages[batchSize].n_buffers = spec.iovlen;
-
-                    for (int k = 0; k < spec.iovlen; ++k) {
-                        niceVectors[vecIdx].buffer = spec.iov[k].iov_base;
-                        niceVectors[vecIdx].size = spec.iov[k].iov_len;
-                        vecIdx++;
-                    }
-
-                    batchSize++;
-                }
-
-
-                const int nSent = ctx->agent ? nice_agent_send_messages_nonblocking(
-                    ctx->agent,
-                    ctx->streamId,
-                    1,
-                    niceMessages,
-                    batchSize,
-                    nullptr,
-                    nullptr
-                ) : -1;
-
-
-
-                if (nSent < 0) {
-                    break;
-                }
-
-                totalSent += nSent;
-                i += nSent;
-
-                if (nSent < batchSize) {
-                    return totalSent;
-                }
-            }
-
-            process();
-
-            return totalSent;
+        if (!ctx || !ctx->agent) {
+            // No context/agent: tell lsquic we didn't send this one
+            // Returning totalSent is fine; lsquic will retry later.
+            return (int) totalSent;
         }
+
+        // Flatten iov into a single contiguous buffer because nice_agent_send()
+        // only sends one buffer.
+        size_t totalLen = 0;
+        for (unsigned k = 0; k < spec.iovlen; ++k) {
+            totalLen += spec.iov[k].iov_len;
+        }
+
+        // Safety: avoid huge allocations (shouldn't happen; QUIC packets are small)
+        if (totalLen == 0) {
+            ++totalSent;
+            continue;
+        }
+
+        // Stack buffer for typical QUIC packet sizes; fallback to heap if needed.
+        // QUIC UDP payload usually <= ~1350-1500 bytes.
+        uint8_t stackBuf[2048];
+        std::unique_ptr<uint8_t[]> heapBuf;
+
+        uint8_t *buf = nullptr;
+        if (totalLen <= sizeof(stackBuf)) {
+            buf = stackBuf;
+        } else {
+            heapBuf = std::make_unique<uint8_t[]>(totalLen);
+            buf = heapBuf.get();
+        }
+
+        // Copy iovecs into contiguous buffer
+        size_t off = 0;
+        for (unsigned k = 0; k < spec.iovlen; ++k) {
+            const size_t len = spec.iov[k].iov_len;
+            memcpy(buf + off, spec.iov[k].iov_base, len);
+            off += len;
+        }
+
+        // Send a single datagram
+        // Returns number of bytes sent, or negative on error.
+        const int rc = nice_agent_send(
+            ctx->agent,
+            ctx->streamId,
+            1,                        // component_id
+            (guint) totalLen,
+            (gchar *) buf
+        );
+
+        if (rc < 0) {
+            // Socket likely backpressured; stop so lsquic retries later.
+            return (int) totalSent;
+        }
+
+        // rc should equal totalLen for UDP; if not, treat as partial/failure.
+        if ((size_t) rc != totalLen) {
+            return (int) totalSent;
+        }
+
+        ++totalSent;
+    }
+
+    return (int) totalSent;
+}
 
         static void setAndVerifySocketBuffers(NiceAgent *agent, guint streamId, int componentId, const int bufSize) {
             GSocket *gsock = nice_agent_get_selected_socket(agent, streamId, componentId);
