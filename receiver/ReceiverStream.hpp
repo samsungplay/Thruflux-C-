@@ -462,6 +462,7 @@ namespace receiver {
             settings.es_scid_len = 8;
             settings.es_max_cfcw = ReceiverConfig::quicConnWindowBytes * 2;
             settings.es_max_sfcw = ReceiverConfig::quicStreamWindowBytes * 2;
+            settings.es_progress_check = 10000;
 
 
             char err_buf[256];
@@ -474,7 +475,7 @@ namespace receiver {
             api.ea_stream_if = &streamCallbacks;
             api.ea_packets_out = sendPackets;
             api.ea_get_ssl_ctx = getSslCtx;
-            engine_ = lsquic_engine_new(LSENG_SERVER, &api);
+            engine = lsquic_engine_new(LSENG_SERVER, &api);
             watchProgress();
         }
 
@@ -513,7 +514,7 @@ namespace receiver {
                                       guint len, gchar *buf, gpointer user_data) {
                                        auto *c = static_cast<common::ConnectionContext *>(user_data);
 
-                                       lsquic_engine_packet_in(engine_, (unsigned char *) buf, len,
+                                       lsquic_engine_packet_in(engine, (unsigned char *) buf, len,
                                                                (sockaddr *) &c->localAddr,
                                                                (sockaddr *) &c->remoteAddr,
                                                                c, 0);

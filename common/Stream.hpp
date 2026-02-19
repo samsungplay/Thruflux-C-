@@ -36,13 +36,13 @@ namespace common {
 
     class Stream {
     protected:
-        inline static lsquic_engine_t *engine_;
+
         inline static std::vector<ConnectionContext *> connectionContexts_;
         inline static SSL_CTX *sslCtx_ = nullptr;
 
 
         static gboolean engineTick(gpointer data) {
-            if (!engine_) {
+            if (!engine) {
                 return G_SOURCE_REMOVE;
             }
 
@@ -50,7 +50,7 @@ namespace common {
 
             int diff;
 
-            if (lsquic_engine_earliest_adv_tick(engine_, &diff)) {
+            if (lsquic_engine_earliest_adv_tick(engine, &diff)) {
                 if (diff <= 0) {
                     g_idle_add_full(G_PRIORITY_DEFAULT, engineTick, nullptr, nullptr);
                 } else {
@@ -93,6 +93,7 @@ namespace common {
         }
 
     public:
+        inline static lsquic_engine_t *engine;
         static int sendPackets(void *packetsOutCtx, const lsquic_out_spec *specs, unsigned nSpecs) {
             if (nSpecs == 0) {
                 return 0;
@@ -204,9 +205,9 @@ namespace common {
         }
 
         static void dispose() {
-            if (engine_) {
-                lsquic_engine_destroy(engine_);
-                engine_ = nullptr;
+            if (engine) {
+                lsquic_engine_destroy(engine);
+                engine = nullptr;
             }
 
 
@@ -227,8 +228,8 @@ namespace common {
 
 
         static void process() {
-            lsquic_engine_process_conns(engine_);
-            lsquic_engine_send_unsent_packets(engine_);
+            lsquic_engine_process_conns(engine);
+            lsquic_engine_send_unsent_packets(engine);
         }
     };
 }

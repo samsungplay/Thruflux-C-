@@ -2,11 +2,13 @@
 #include <future>
 #include <string>
 #include <boost/asio/post.hpp>
-#include <boost/asio/execution/bad_executor.hpp>
 
+#include "Contexts.hpp"
+#include "Stream.hpp"
 #include "ThreadManager.hpp"
 #include "../sender/SenderConfig.hpp"
 #include "../receiver/ReceiverConfig.hpp"
+#include "Types.hpp"
 
 extern "C" {
 #include <agent.h>
@@ -16,12 +18,6 @@ extern "C" {
 namespace common {
     using ConnectionCallback = std::function<void (NiceAgent *agent, bool success, guint streamId, int n)>;
 
-
-    struct CandidatesResult {
-        std::string ufrag;
-        std::string password;
-        nlohmann::json serializedCandidates;
-    };
 
     using CandidatesCallback = std::function<void (CandidatesResult result)>;
 
@@ -37,22 +33,12 @@ namespace common {
 
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CandidatesResult, ufrag, password, serializedCandidates);
 
-    struct StunServer {
-        std::string host;
-        int port = 0;
-    };
-
-    struct TurnServer {
-        std::string host;
-        int port = 0;
-        std::string username;
-        std::string password;
-    };
 
     struct IceAgentContext {
         NiceAgent *agent;
         guint streamId;
     };
+
 
     inline static std::vector<StunServer> stunServers_;
     inline static std::vector<TurnServer> turnServers_;
@@ -102,6 +88,8 @@ namespace common {
                 g_signal_handlers_disconnect_matched(
                     agent, static_cast<GSignalMatchType>(G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA | G_SIGNAL_MATCH_ID),
                     0, 0, nullptr, nullptr, nullptr);
+
+
                 nice_agent_remove_stream(agent, it->second.streamId);
                 g_object_unref(agent);
                 agentsMap_.erase(it);
@@ -112,7 +100,7 @@ namespace common {
             if (receiverAgentContext_.agent) {
                 g_object_unref(receiverAgentContext_.agent);
             }
-            for (const auto &agentContext: agentsMap_ | std::views::values) {
+            for (auto &agentContext: agentsMap_ | std::views::values) {
                 g_object_unref(agentContext.agent);
             }
         }
@@ -153,9 +141,12 @@ namespace common {
 
             for (int i = 1; i <= n; i++) {
                 nice_agent_set_port_range(agent, stream_id, i, 49152, 65535);
-                // nice_agent_attach_recv(agent, stream_id, i, ThreadManager::getContext(),
-                //                        [](NiceAgent *, guint, guint, guint, gchar *, gpointer) {
-                //                        }, nullptr);
+                nice_agent_attach_recv(agent, stream_id, 1, common::ThreadManager::getContext(),
+                                       [](NiceAgent *agent, guint stream_id, guint component_id,
+                                          guint len, gchar *buf, gpointer user_data) {
+                                       },
+                                       nullptr
+                );
             }
             for (const auto &turn: turnServers_) {
                 for (int i = 1; i <= n; i++) {
@@ -316,7 +307,6 @@ namespace common {
                                   },
                                   static_cast<GConnectFlags>(0)
             );
-
         }
     };
 }

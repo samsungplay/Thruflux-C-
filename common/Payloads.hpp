@@ -1,10 +1,7 @@
 #pragma once
 #include <string>
 #include <nlohmann/json.hpp>
-#include <vector>
-
-#include "IceHandler.hpp"
-
+#include "Types.hpp"
 namespace common {
 
     struct RejectTransferSessionPayload {

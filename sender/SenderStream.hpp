@@ -7,8 +7,7 @@
 #include <indicators/dynamic_progress.hpp>
 #include <indicators/multi_progress.hpp>
 #include <indicators/progress_bar.hpp>
-#include <indicators/termcolor.hpp>
-
+#include "../common/IceHandler.hpp"
 namespace sender {
     class SenderStream : public common::Stream {
         //unlike receiver, sender's progress reporter should run persistently
@@ -362,6 +361,7 @@ namespace sender {
             settings.es_scid_len = 8;
             settings.es_max_cfcw = SenderConfig::quicConnWindowBytes * 2;
             settings.es_max_sfcw = SenderConfig::quicStreamWindowBytes * 2;
+            settings.es_progress_check = 10000;
 
 
             char err_buf[256];
@@ -374,7 +374,7 @@ namespace sender {
             api.ea_stream_if = &streamCallbacks;
             api.ea_packets_out = sendPackets;
             api.ea_get_ssl_ctx = getSslCtx;
-            engine_ = lsquic_engine_new(0, &api);
+            engine = lsquic_engine_new(0, &api);
 
             watchProgress();
             g_timeout_add(0, engineTick, nullptr);
@@ -409,7 +409,6 @@ namespace sender {
             nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
             nice_address_copy_to_sockaddr(&remote->addr, reinterpret_cast<sockaddr *>(&ctx->remoteAddr));
 
-
             connectionContexts_.push_back(ctx);
 
 
@@ -418,7 +417,7 @@ namespace sender {
                                       guint len, gchar *buf, gpointer user_data) {
                                        auto *c = static_cast<common::ConnectionContext *>(user_data);
 
-                                       lsquic_engine_packet_in(engine_, (unsigned char *) buf, len,
+                                       lsquic_engine_packet_in(engine, (unsigned char *) buf, len,
                                                                (sockaddr *) &c->localAddr,
                                                                (sockaddr *) &c->remoteAddr,
                                                                c, 0);
@@ -432,7 +431,7 @@ namespace sender {
 
 
             lsquic_engine_connect(
-                engine_,
+                engine,
                 LSQVER_I001,
                 reinterpret_cast<const sockaddr *>(&ctx->localAddr),
                 reinterpret_cast<const sockaddr *>(&ctx->remoteAddr),

@@ -1,16 +1,17 @@
 #pragma once
 #include <random>
 
-#include "Payloads.hpp"
 #include <openssl/hmac.h>
-#include <openssl/evp.h>
 #include <boost/url.hpp>
 
-#include "IceHandler.hpp"
 #include <indicators/progress_bar.hpp>
 #include <chrono>
 #include <mutex>
+#include <glib.h>
+#include <openssl/base64.h>
 
+#include "Types.hpp"
+#include "Payloads.hpp"
 
 namespace common {
     inline constexpr char EMBEDDED_CA_BUNDLE[] =
