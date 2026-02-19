@@ -16,96 +16,8 @@ static int popcount32(unsigned int x) {
 #endif
 
 
+
 namespace receiver {
-    static constexpr size_t IO_BUF = 4 * 1024 * 1024;
-    static constexpr size_t POOL_COUNT = 128;
-
-    struct Buf {
-        std::unique_ptr<uint8_t[]> p;
-        size_t cap = 0;
-    };
-
-    struct WriteJob {
-        uint32_t fileId;
-        uint64_t off;
-        uint8_t *data;
-        uint32_t len;
-        // return buffer to pool:
-        Buf *bufOwner;
-    };
-
-    class BoundedPipeline {
-    public:
-        explicit BoundedPipeline(size_t bufCount, size_t bufSize)
-            : bufSize_(bufSize) {
-            bufs_.reserve(bufCount);
-            for (size_t i = 0; i < bufCount; ++i) {
-                auto b = std::make_unique<Buf>();
-                b->p = std::unique_ptr<uint8_t[]>(new uint8_t[bufSize_]);
-                b->cap = bufSize_;
-                free_.push_back(b.get());
-                bufs_.push_back(std::move(b));
-            }
-        }
-        void notifyAll() { cv_.notify_all(); }
-
-        // producer (QUIC thread) acquires a buffer (non-blocking)
-        Buf *tryAcquireBuf() {
-            std::lock_guard<std::mutex> lk(mu_);
-            if (free_.empty()) return nullptr;
-            Buf *b = free_.back();
-            free_.pop_back();
-            return b;
-        }
-
-        void releaseBuf(Buf *b) {
-            std::lock_guard<std::mutex> lk(mu_);
-            free_.push_back(b);
-            cv_.notify_one();
-        }
-
-        // enqueue a write job (non-blocking if we ensure it never exceeds cap)
-        bool tryEnqueue(const WriteJob &j) {
-            std::lock_guard<std::mutex> lk(mu_);
-            if (q_.size() >= cap_) return false;
-            q_.push_back(j);
-            cv_.notify_one();
-            return true;
-        }
-
-        // consumer (disk thread) waits for a job
-        bool popWait(WriteJob &out, bool &stopFlag) {
-            std::unique_lock<std::mutex> lk(mu_);
-            cv_.wait(lk, [&] { return stopFlag || !q_.empty(); });
-            if (stopFlag && q_.empty()) return false;
-            out = q_.front();
-            q_.pop_front();
-            return true;
-        }
-
-        void setCapacity(size_t cap) { cap_ = cap; }
-
-        size_t queued() const {
-            std::lock_guard<std::mutex> lk(mu_);
-            return q_.size();
-        }
-
-        size_t freeCount() const {
-            std::lock_guard<std::mutex> lk(mu_);
-            return free_.size();
-        }
-
-    private:
-        size_t bufSize_;
-        mutable std::mutex mu_;
-        std::condition_variable cv_;
-
-        std::vector<std::unique_ptr<Buf> > bufs_;
-        std::vector<Buf *> free_;
-        std::deque<WriteJob> q_;
-        size_t cap_ = 0;
-    };
-
 
     struct ReceiverConnectionContext : common::ConnectionContext {
         std::chrono::steady_clock::time_point lastResumeFlush{};
@@ -123,16 +35,6 @@ namespace receiver {
         uint64_t resumeOffset = 0;
         std::string resumeStatePath;
         int manifestAckSent = 0;
-
-        std::unique_ptr<receiver::BoundedPipeline> pipe;
-        std::thread diskThread;
-        std::atomic<bool> stopDisk{false};
-
-        lsquic_stream_t *dataStream = nullptr;
-        std::atomic<bool> readPaused{false};
-
-        uint32_t curWriteFileId = 0;
-        uint64_t curWriteOff = 0;
 
         indicators::ProgressBar manifestProgressBar{
             indicators::option::BarWidth{0},
@@ -237,64 +139,6 @@ namespace receiver {
                 }
             }
 
-            curWriteFileId = resumeFileId;
-            curWriteOff = resumeOffset;
-            pipe = std::make_unique<receiver::BoundedPipeline>(POOL_COUNT, IO_BUF);
-            pipe->setCapacity(POOL_COUNT);
-
-            stopDisk = false;
-            diskThread = std::thread([this] {
-                receiver::WriteJob job{};
-                while (true) {
-                    bool stop = stopDisk.load(std::memory_order_relaxed);
-                    if (!pipe->popWait(job, stop)) break;
-
-                    llfio::file_handle *fh = cache.acquire(job.fileId, true);
-                    if (!fh) {
-                        stopDisk = true;
-                        pipe->releaseBuf(job.bufOwner);
-                        break;
-                    }
-
-                    llfio::byte_io_handle::const_buffer_type reqBuf({
-                        reinterpret_cast<const llfio::byte *>(job.data),
-                        static_cast<size_t>(job.len)
-                    });
-
-                    llfio::file_handle::io_request<llfio::file_handle::const_buffers_type> req(
-                        llfio::file_handle::const_buffers_type{&reqBuf, 1},
-                        job.off
-                    );
-
-                    auto result = fh->write(req);
-                    cache.release(job.fileId);
-
-                    if (!result || result.bytes_transferred() < job.len) {
-                        stopDisk = true;
-                        pipe->releaseBuf(job.bufOwner);
-                        break;
-                    }
-
-                    bytesMoved += job.len;
-                    resumeFileId = job.fileId;
-                    resumeOffset = job.off + job.len;
-                    resumeDirty = true;
-
-                    pipe->releaseBuf(job.bufOwner);
-
-                    while (resumeFileId < fileSizes.size() && resumeOffset >= fileSizes[resumeFileId]) {
-                        filesMoved++;
-                        resumeOffset = 0;
-                        resumeFileId++;
-                    }
-
-                    if (!complete && filesMoved >= totalExpectedFilesCount) {
-                        complete = true;
-                        pendingCompleteAck = true;
-                    }
-                }
-            });
-
 
             spdlog::info("Manifest unsealed: {} file(s) , Total size: {}", count,
                          common::Utils::sizeToReadableFormat(totalExpectedBytes));
@@ -332,24 +176,68 @@ namespace receiver {
     struct ReceiverStreamContext {
         enum StreamType { UNKNOWN, MANIFEST, DATA } type = UNKNOWN;
 
+        std::vector<uint8_t> stage;
+        size_t stageLen = 0;
+        uint64_t stageBaseOff = 0;
+        static constexpr size_t STAGE_CAP = 16 * 1024 * 1024;
+        static constexpr size_t FLUSH_AT  =  8 * 1024 * 1024;
+
         uint32_t curFileId = 0;
         uint64_t curOff = 0;
         uint64_t curSize = 0;
         uint32_t pinnedFileId = UINT32_MAX;
         llfio::file_handle *pinnedHandle = nullptr;
-        uint8_t writeBuffer[common::CHUNK_SIZE];
+        uint8_t writeBuffer[256 * 1024];
+
+        ReceiverStreamContext() {
+            stage.resize(STAGE_CAP);
+        }
 
         bool openFile(ReceiverConnectionContext *connCtx, uint32_t fileId) {
             if (fileId >= connCtx->fileSizes.size()) return false;
             curFileId = fileId;
             curSize = connCtx->fileSizes[fileId];
-
+            stageLen = 0;
+            stageBaseOff = 0;
             if (pinnedFileId != fileId) {
                 if (pinnedFileId != UINT32_MAX) connCtx->cache.release(pinnedFileId);
                 pinnedFileId = fileId;
                 pinnedHandle = connCtx->cache.acquire(fileId, true);
                 if (!pinnedHandle) return false;
             }
+
+            return true;
+        }
+
+        bool flushStage(receiver::ReceiverConnectionContext* connCtx) {
+            if (stageLen == 0) return true;
+            if (!pinnedHandle) return false;
+
+            llfio::byte_io_handle::const_buffer_type reqBuf({
+                reinterpret_cast<const llfio::byte*>(stage.data()),
+                stageLen
+            });
+
+            llfio::file_handle::io_request<llfio::file_handle::const_buffers_type> req(
+                llfio::file_handle::const_buffers_type{&reqBuf, 1},
+                stageBaseOff
+            );
+
+            auto result = pinnedHandle->write(req);
+            if (!result) return false;
+
+            const size_t nw = result.bytes_transferred();
+            if (nw != stageLen) return false;
+
+            connCtx->bytesMoved += nw;
+            curOff += nw;
+
+            connCtx->resumeFileId = curFileId;
+            connCtx->resumeOffset = curOff;
+            connCtx->resumeDirty = true;
+
+            stageLen = 0;
+            stageBaseOff = curOff;
             return true;
         }
     };

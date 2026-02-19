@@ -87,13 +87,6 @@ namespace receiver {
                 receiverConnectionContext->lastBytesMoved = receiverConnectionContext->bytesMoved;
 
                 receiverConnectionContext->maybeSaveResumeState();
-
-                if (receiverConnectionContext->readPaused.load() && receiverConnectionContext->pipe && receiverConnectionContext->pipe->freeCount() > POOL_COUNT / 2) {
-                    receiverConnectionContext->readPaused = false;
-                    if (receiverConnectionContext->dataStream) {
-                        lsquic_stream_wantread(receiverConnectionContext->dataStream, 1);
-                    }
-                }
                 return G_SOURCE_CONTINUE;
             }, nullptr, nullptr);
         }
@@ -150,10 +143,6 @@ namespace receiver {
                 auto *ctx = reinterpret_cast<ReceiverConnectionContext *>(lsquic_conn_get_ctx(c));
                 lsquic_conn_set_ctx(c, nullptr);
                 if (ctx) {
-                    ctx->stopDisk = true;
-
-                    if (ctx->pipe) ctx->pipe->notifyAll();
-                    if (ctx->diskThread.joinable()) ctx->diskThread.join();
                     if (ctx->complete) {
                         const auto &progressBar = ctx->progressBar;
                         progressBar->set_option(
@@ -219,11 +208,10 @@ namespace receiver {
                                         ? ReceiverStreamContext::MANIFEST
                                         : ReceiverStreamContext::DATA;
                         if (ctx->type == ReceiverStreamContext::DATA && !connCtx->started) {
-                            connCtx->dataStream = stream;
-                            connCtx->readPaused = false;
-
                             ctx->openFile(connCtx, connCtx->resumeFileId);
                             ctx->curOff = connCtx->resumeOffset;
+                            ctx->stageLen = 0;
+                            ctx->stageBaseOff = ctx->curOff;
 
                             connCtx->startTime = std::chrono::steady_clock::now();
                             connCtx->progressBar->set_option(
@@ -281,72 +269,80 @@ namespace receiver {
                 }
 
                 while (true) {
-                    receiver::Buf *b = connCtx->pipe->tryAcquireBuf();
-                    if (!b) {
-                        if (!connCtx->readPaused.exchange(true)) {
-                            lsquic_stream_wantread(stream, 0);
-                        }
+                    if (!ctx->pinnedHandle) {
+                        lsquic_stream_close(stream);
                         return;
                     }
 
-                    ssize_t nr = lsquic_stream_read(stream, b->p.get(), b->cap);
-                    if (nr <= 0) {
-                        connCtx->pipe->releaseBuf(b);
-
-                        if (nr == 0) {
-                            // FIN from sender: stop reading
-                            // you may keep waiting for complete ACK logic via manifest stream
+                    if (ctx->curOff >= ctx->curSize) {
+                        if (!ctx->flushStage(connCtx)) {
+                            lsquic_stream_close(stream);
+                            return;
                         }
-                        break;
-                    }
 
-                    // 3) compute where this belongs (sequential state)
-                    // We use connCtx->curWriteFileId/curWriteOff as the NEXT expected write position.
-                    // IMPORTANT: Those should be advanced ONLY when we enqueue, since ordering is preserved.
-                    // Disk thread is writing in same order jobs were enqueued.
-                    uint32_t fid = connCtx->curWriteFileId;
-                    uint64_t off = connCtx->curWriteOff;
-
-                    // cap write to current file size
-                    uint64_t fileSz = connCtx->fileSizes[fid];
-                    uint64_t remainingInFile = (off < fileSz) ? (fileSz - off) : 0;
-
-                    if (remainingInFile == 0) {
-                        // advance to next file
                         connCtx->filesMoved++;
-                        // optional: but careful, this should reflect completed files. Better move to disk thread.
-                        // safer: do NOT update filesMoved here; let disk thread do it when it crosses boundaries.
-                        connCtx->curWriteFileId++;
-                        connCtx->curWriteOff = 0;
-                        connCtx->pipe->releaseBuf(b);
+                        ctx->curFileId++;
+
+                        if (ctx->curFileId >= connCtx->fileSizes.size()) {
+                        } else {
+                            if (!ctx->openFile(connCtx, ctx->curFileId)) {
+                                lsquic_stream_close(stream);
+                                return;
+                            }
+                            ctx->curOff = 0;
+                            ctx->stageLen = 0;
+                            ctx->stageBaseOff = 0;
+                        }
                         continue;
                     }
 
-                    uint32_t toWrite = static_cast<uint32_t>(std::min<uint64_t>(remainingInFile, (uint64_t) nr));
-
-                    receiver::WriteJob job{
-                        .fileId = fid,
-                        .off = off,
-                        .data = b->p.get(),
-                        .len = toWrite,
-                        .bufOwner = b
-                    };
-
-                    // 4) enqueue
-                    if (!connCtx->pipe->tryEnqueue(job)) {
-                        // queue full: return buffer and pause
-                        connCtx->pipe->releaseBuf(b);
-                        if (!connCtx->readPaused.exchange(true)) {
-                            lsquic_stream_wantread(stream, 0);
-                        }
-                        return;
+                    if (ctx->stageLen == 0) {
+                        ctx->stageBaseOff = ctx->curOff;
                     }
 
-                    // 5) advance expected position for next enqueue
-                    connCtx->curWriteOff += toWrite;
-                    if (connCtx->curWriteOff >= fileSz) {
-                        connCtx->curWriteFileId++;
-                        connCtx->curWriteOff = 0;
+                    const size_t stageRoom = ctx->stage.size() - ctx->stageLen;
+                    if (stageRoom == 0) {
+                        if (!ctx->flushStage(connCtx)) {
+                            lsquic_stream_close(stream);
+                            return;
+                        }
+                        continue;
+                    }
+
+                    const uint64_t fileRemaining = ctx->curSize - ctx->curOff;
+                    const size_t maxRead = std::min<uint64_t>(stageRoom, fileRemaining);
+
+                    ssize_t nr = lsquic_stream_read(stream, ctx->stage.data() + ctx->stageLen, maxRead);
+                    if (nr <= 0) break;
+
+                    ctx->stageLen += static_cast<size_t>(nr);
+
+                    if (ctx->stageLen >= ReceiverStreamContext::FLUSH_AT) {
+                        if (!ctx->flushStage(connCtx)) {
+                            lsquic_stream_close(stream);
+                            return;
+                        }
+                    }
+
+                    if (ctx->stageBaseOff + ctx->stageLen >= ctx->curSize) {
+                        if (!ctx->flushStage(connCtx)) {
+                            lsquic_stream_close(stream);
+                            return;
+                        }
+
+                    }
+
+                    if (!connCtx->complete && connCtx->filesMoved == connCtx->totalExpectedFilesCount) {
+                        if (!ctx->flushStage(connCtx)) {
+                            lsquic_stream_close(stream);
+                            return;
+                        }
+
+                        connCtx->complete = true;
+                        connCtx->pendingCompleteAck = true;
+                        lsquic_stream_wantwrite(connCtx->manifestStream, 1);
+                        lsquic_stream_wantread(stream, 0);
+                        return;
                     }
                 }
             },
@@ -388,6 +384,10 @@ namespace receiver {
                 auto *ctx = reinterpret_cast<ReceiverStreamContext *>(h);
                 auto *connCtx = reinterpret_cast<ReceiverConnectionContext *>(lsquic_conn_get_ctx(
                     lsquic_stream_conn(stream)));
+
+                if (connCtx && !connCtx->complete) {
+                    (void) ctx->flushStage(connCtx);
+                }
                 if (connCtx && ctx->pinnedFileId != UINT32_MAX) {
                     connCtx->cache.release(ctx->pinnedFileId);
                     ctx->pinnedFileId = UINT32_MAX;
