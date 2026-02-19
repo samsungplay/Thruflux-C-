@@ -152,8 +152,7 @@ namespace common {
                     nullptr
                 ) : -1;
 
-                process()
-;
+
 
                 if (nSent < 0) {
                     break;
@@ -166,6 +165,8 @@ namespace common {
                     return totalSent;
                 }
             }
+
+            process();
 
             return totalSent;
         }
