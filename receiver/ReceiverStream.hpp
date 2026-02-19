@@ -517,13 +517,9 @@ namespace receiver {
                                                                (sockaddr *) &c->localAddr,
                                                                (sockaddr *) &c->remoteAddr,
                                                                c, 0);
-                                       static auto lastTimestamp = std::chrono::steady_clock::now();
-                                       auto now = std::chrono::steady_clock::now();
 
-                                       if (now - lastTimestamp > std::chrono::milliseconds(1)) {
                                            process();
-                                           lastTimestamp = now;
-                                       }
+
                                    },
                                    ctx
             );
