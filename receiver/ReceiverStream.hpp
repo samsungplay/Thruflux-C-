@@ -274,22 +274,23 @@ namespace receiver {
 
                     if (!ctx->pinnedHandle) { lsquic_stream_close(stream); return; }
 
-                    llfio::byte_io_handle::const_buffer_type reqBuf({
-                        reinterpret_cast<const llfio::byte *>(ctx->writeBuffer),
-                        (size_t)nr
-                    });
+                    // llfio::byte_io_handle::const_buffer_type reqBuf({
+                    //     reinterpret_cast<const llfio::byte *>(ctx->writeBuffer),
+                    //     (size_t)nr
+                    // });
+                    //
+                    // llfio::file_handle::io_request<llfio::file_handle::const_buffers_type> req(
+                    //     llfio::file_handle::const_buffers_type{&reqBuf, 1},
+                    //     ctx->curOff
+                    // );
+                    //
+                    // auto result = ctx->pinnedHandle->write(req);
+                    // if (!result) { lsquic_stream_close(stream); return; }
+                    // size_t nw = result.bytes_transferred();
+                    // if (nw < static_cast<size_t>(nr)) { lsquic_stream_close(stream); return; }
 
-                    llfio::file_handle::io_request<llfio::file_handle::const_buffers_type> req(
-                        llfio::file_handle::const_buffers_type{&reqBuf, 1},
-                        ctx->curOff
-                    );
 
-                    auto result = ctx->pinnedHandle->write(req);
-                    if (!result) { lsquic_stream_close(stream); return; }
-                    size_t nw = result.bytes_transferred();
-                    if (nw < static_cast<size_t>(nr)) { lsquic_stream_close(stream); return; }
-
-
+                    const auto nw = nr;
                     connCtx->bytesMoved += nw;
                     ctx->curOff += nw;
 
