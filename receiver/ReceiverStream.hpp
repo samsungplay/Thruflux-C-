@@ -309,26 +309,25 @@ namespace receiver {
                             return;
                         }
 
-                        // llfio::byte_io_handle::const_buffer_type reqBuf({
-                        //     reinterpret_cast<const llfio::byte *>(ctx->writeBuffer),
-                        //     static_cast<size_t>(nr)
-                        // });
-                        //
-                        // llfio::file_handle::io_request<llfio::file_handle::const_buffers_type> req(
-                        //     llfio::file_handle::const_buffers_type{&reqBuf, 1},
-                        //     ctx->chunkOffset + ctx->bodyBytesRead
-                        // );
-                        //
-                        // auto result = ctx->pinnedHandle->write(req);
-                        //
-                        // if (!result) {
-                        //     spdlog::error("Could not write file to disk {}", result.error().message());
-                        //     lsquic_stream_close(stream);
-                        //     return;
-                        // }
+                        llfio::byte_io_handle::const_buffer_type reqBuf({
+                            reinterpret_cast<const llfio::byte *>(ctx->writeBuffer),
+                            static_cast<size_t>(nr)
+                        });
 
-                        // const auto nw =
-                        const auto nw = nr;
+                        llfio::file_handle::io_request<llfio::file_handle::const_buffers_type> req(
+                            llfio::file_handle::const_buffers_type{&reqBuf, 1},
+                            ctx->chunkOffset + ctx->bodyBytesRead
+                        );
+
+                        auto result = ctx->pinnedHandle->write(req);
+
+                        if (!result) {
+                            spdlog::error("Could not write file to disk {}", result.error().message());
+                            lsquic_stream_close(stream);
+                            return;
+                        }
+
+                        const auto nw = result.bytes_transferred();
 
                         if (nw < nr) {
                             spdlog::error("Unexpected partial write to disk; expected = {} written = {}", nr, nw);
@@ -458,7 +457,7 @@ namespace receiver {
             settings.es_init_max_stream_data_bidi_remote = ReceiverConfig::quicStreamWindowBytes;
             settings.es_handshake_to = 16777215;
             settings.es_allow_migration = 0;
-            settings.es_pace_packets = 0;
+            settings.es_pace_packets = 1;
             settings.es_delayed_acks = 0;
             settings.es_max_batch_size = 32;
             settings.es_scid_len = 8;
