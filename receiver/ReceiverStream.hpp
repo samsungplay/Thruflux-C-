@@ -220,7 +220,6 @@ namespace receiver {
                 if (ctx->type == ReceiverStreamContext::MANIFEST) {
                     uint8_t tmp[4096];
                     while (!connCtx->manifestParsed) {
-                        //TODO add progress here
                         const auto nr = lsquic_stream_read(stream, tmp, sizeof(tmp));
                         if (nr > 0) {
                             connCtx->manifestBuf.insert(connCtx->manifestBuf.end(), tmp, tmp + nr);
@@ -254,7 +253,7 @@ namespace receiver {
                             break;
                         }
                         if (nr < 0 && errno != 35) {
-                            spdlog::error("Error while reading manifest stream {}",errno);
+                            // spdlog::error("Error while reading manifest stream {}",errno);
                         } else if (nr < 0) {
                             break;
                         }
