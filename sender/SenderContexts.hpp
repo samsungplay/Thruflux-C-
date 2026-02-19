@@ -115,7 +115,7 @@ namespace sender {
             }
 
             cache.reset(files.size());
-            for (auto &f : files) cache.registerPath(f.id, f.path);
+            for (auto &f: files) cache.registerPath(f.id, f.path);
 
 
             std::string stats = std::to_string(filesCount) + " file(s), " + common::Utils::sizeToReadableFormat(
@@ -161,8 +161,6 @@ namespace sender {
         }
 
 
-
-
         int addNewProgressBar(std::string prefix) {
             progressBarsStorage.push_back(common::Utils::createProgressBarUniquePtr(std::move(prefix)));
             const size_t id = progressBars.push_back(*progressBarsStorage.back());
@@ -177,15 +175,17 @@ namespace sender {
     struct SenderConnectionContext : common::ConnectionContext {
         std::string receiverId;
         bool manifestStreamCreated = false;
+        bool dataStreamCreated = false;
         size_t currentFileIndex = 0;
         uint64_t currentFileOffset = 0;
         bool manifestCreated = false;
         size_t manifestSent = 0;
         size_t progressBarIndex = 0;
         std::vector<uint8_t> ackBuf;
-        std::vector<uint8_t> resumeBitmap;
         uint64_t logicalBytesMoved = 0;
         uint64_t lastLogicalBytesMoved = 0;
+        uint32_t resumeFileId = 0;
+        uint64_t resumeOffset = 0;
     };
 
     struct SenderStreamContext {
@@ -193,105 +193,88 @@ namespace sender {
         bool typeByteSent = false;
         bool isManifestStream = false;
         std::vector<uint8_t> readBuf;
-        uint32_t fileId = 0;
-        uint64_t offset = 0;
-        uint32_t len = 0;
-        uint32_t bytesSent = 0;
-        uint8_t headerBuf[16];
-        bool sendingHeader = false;
-        uint8_t headerSent = 0;
         int id = 0;
         uint32_t pinnedFileId = UINT32_MAX;
-        llfio::file_handle* pinnedHandle = nullptr;
+        llfio::file_handle *pinnedHandle = nullptr;
+        uint64_t fileSize = 0;
+        uint64_t fileOffset = 0;
+        size_t bufReady = 0;
+        size_t bufSent = 0;
+        bool eofAll = false;
 
-        bool loadNextChunk() {
-            while (true) {
-                if (connectionContext->currentFileIndex >= senderPersistentContext.files.size()) {
-                    return false;
-                }
+        void initialize() {
+            if (readBuf.empty()) readBuf.resize(common::CHUNK_SIZE);
 
-                auto &f = senderPersistentContext.files[connectionContext->currentFileIndex];
-                const uint64_t off = connectionContext->currentFileOffset;
-
-                connectionContext->currentFileOffset += common::CHUNK_SIZE;
-
-                if (off >= f.size) {
-                    connectionContext->currentFileIndex++;
-                    connectionContext->filesMoved++;
-                    connectionContext->currentFileOffset = 0;
-                    if (pinnedFileId != UINT32_MAX) {
-                        senderPersistentContext.cache.release(pinnedFileId);
-                        pinnedFileId = UINT32_MAX;
-                        pinnedHandle = nullptr;
-                    }
-                    continue;
-                }
-
-                if (!connectionContext->resumeBitmap.empty()) {
-                    const uint64_t chunkInFile = off / common::CHUNK_SIZE;
-                    const uint64_t globalChunk =
-                            senderPersistentContext.fileChunkBase[f.id] + chunkInFile;
-                    if (globalChunk < senderPersistentContext.totalChunks &&
-                        common::Utils::getBit(connectionContext->resumeBitmap, globalChunk)) {
-                        const auto len = std::min(common::CHUNK_SIZE, f.size - off);
-                        connectionContext->logicalBytesMoved += len;
-                        connectionContext->skippedBytes += len;
-                        continue;
-                    }
-                }
-
-                fileId = f.id;
-                offset = off;
-                len = std::min(common::CHUNK_SIZE, f.size - off);
-                bytesSent = 0;
-
-                if (pinnedFileId != fileId) {
-                    if (pinnedFileId != UINT32_MAX) {
-                        senderPersistentContext.cache.release(pinnedFileId);
-                    }
-                    pinnedFileId = fileId;
-                    pinnedHandle = senderPersistentContext.cache.acquire(fileId);
-                }
-
-                if (!pinnedHandle) {
-                    spdlog::error("Failed to open fd for file ID {}: {}", fileId, f.path);
-                    return false;
-                }
-
-
-                llfio::byte_io_handle::buffer_type reqBuf({
-                    reinterpret_cast<llfio::byte *>(readBuf.data()),
-                    len
-                });
-
-                const llfio::file_handle::io_request<llfio::file_handle::buffers_type> req(
-                    llfio::file_handle::buffers_type{&reqBuf, 1},
-                    offset
-                );
-
-                auto result = pinnedHandle->read(req);
-
-                if (!result) {
-                    spdlog::error("Failed to read file with fileId {}: {}", fileId, result.error().message());
-                    return false;
-                }
-
-
-                const auto bytesRead = result.bytes_transferred();
-                if (bytesRead < len) {
-                    spdlog::error("Unexpected EOF on fileId {} at offset {}. Read {}/{} bytes",
-                                  fileId, offset + bytesRead, bytesRead, len);
-                    return false;
-                }
-
-                memcpy(headerBuf, &offset, 8);
-                memcpy(headerBuf + 8, &len, 4);
-                memcpy(headerBuf + 12, &fileId, 4);
-
-                sendingHeader = true;
-                headerSent = 0;
-                return true;
+            if (!openCurrentFile()) {
+                eofAll = true;
+                return;
             }
+            if (!fillBuf()) {
+                while (fileOffset >= fileSize) {
+                    if (!advanceFile()) { eofAll = true; return; }
+                }
+                if (!fillBuf()) { eofAll = true; }
+            }
+        }
+
+        bool openCurrentFile() {
+            if (connectionContext->currentFileIndex >= senderPersistentContext.files.size())
+                return false;
+
+            auto &f = senderPersistentContext.files[connectionContext->currentFileIndex];
+
+            fileSize = f.size;
+            fileOffset = connectionContext->currentFileOffset;
+
+            if (fileOffset > fileSize) fileOffset = fileSize;
+
+            if (pinnedFileId != f.id) {
+                if (pinnedFileId != UINT32_MAX) senderPersistentContext.cache.release(pinnedFileId);
+                pinnedFileId = f.id;
+                pinnedHandle = senderPersistentContext.cache.acquire(f.id);
+                if (!pinnedHandle) return false;
+            }
+
+            return true;
+        }
+
+        bool advanceFile() {
+            connectionContext->currentFileIndex++;
+            connectionContext->filesMoved++;
+            connectionContext->currentFileOffset = 0;
+
+            if (pinnedFileId != UINT32_MAX) {
+                senderPersistentContext.cache.release(pinnedFileId);
+                pinnedFileId = UINT32_MAX;
+                pinnedHandle = nullptr;
+            }
+            return openCurrentFile();
+        }
+
+        bool fillBuf() {
+            if (!pinnedHandle) return false;
+            if (fileOffset >= fileSize) return true;
+
+            const size_t toRead = std::min<uint64_t>(readBuf.size(), fileSize - fileOffset);
+
+            llfio::byte_io_handle::buffer_type reqBuf({
+                reinterpret_cast<llfio::byte *>(readBuf.data()),
+                toRead
+            });
+            llfio::file_handle::io_request<llfio::file_handle::buffers_type> req(
+                llfio::file_handle::buffers_type{&reqBuf, 1},
+                fileOffset
+            );
+
+            auto result = pinnedHandle->read(req);
+            if (!result) return false;
+
+            const auto got = result.bytes_transferred();
+            if (got == 0) return false;
+
+            bufReady = got;
+            bufSent = 0;
+            return true;
         }
     };
 }

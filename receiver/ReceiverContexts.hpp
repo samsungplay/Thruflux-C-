@@ -4,20 +4,22 @@
 #include "ReceiverConfig.hpp"
 #include "../common/Contexts.hpp"
 #ifdef _MSC_VER
-  #include <intrin.h>
-  #pragma intrinsic(__popcnt)
-  static inline int popcount32(unsigned int x) {
-      return (int)__popcnt(x);
-  }
+#include <intrin.h>
+#pragma intrinsic(__popcnt)
+static inline int popcount32(unsigned int x) {
+    return (int) __popcnt(x);
+}
 #else
 static int popcount32(unsigned int x) {
-      return __builtin_popcount(x);
-  }
+    return __builtin_popcount(x);
+}
 #endif
 
 
 namespace receiver {
     struct ReceiverConnectionContext : common::ConnectionContext {
+        std::chrono::steady_clock::time_point lastResumeFlush{};
+        bool resumeDirty = false;
         common::FileHandleCache cache;
         std::vector<uint8_t> manifestBuf;
         bool manifestParsed = false;
@@ -27,16 +29,11 @@ namespace receiver {
         bool pendingManifestAck = false;
         bool pendingCompleteAck = false;
         std::unique_ptr<indicators::ProgressBar> progressBar;
-        std::vector<uint64_t> fileChunkBase;
-        uint64_t totalChunks = 0;
-        std::vector<uint8_t> resumeBitmap;
-        std::string resumeBitmapPath;
-        size_t manifestAckSent = 0;
-        std::chrono::steady_clock::time_point lastResumeBitmapFlush{};
-        bool isResumeBitmapDirty = false;
-        std::vector<uint32_t> fileTotalChunks;
-        std::vector<uint32_t> fileDoneChunks;
-        std::vector<uint8_t> fileCountedDone;
+        uint32_t resumeFileId = 0;
+        uint64_t resumeOffset = 0;
+        std::string resumeStatePath;
+        int manifestAckSent = 0;
+
         indicators::ProgressBar manifestProgressBar{
             indicators::option::BarWidth{0},
             indicators::option::Start{""},
@@ -83,98 +80,60 @@ namespace receiver {
             }
 
 
-            fileChunkBase.resize(fileSizes.size());
-            totalChunks = 0;
-            for (int id = 0; id < fileSizes.size(); id++) {
-                fileChunkBase[id] = totalChunks;
-                totalChunks += common::Utils::ceilDiv(fileSizes[id], common::CHUNK_SIZE);
-            }
-
-            fileTotalChunks.resize(fileSizes.size());
-            fileDoneChunks.assign(fileSizes.size(), 0);
-            fileCountedDone.assign(fileSizes.size(), 0);
-
-            for (uint32_t id = 0; id < fileSizes.size(); ++id) {
-                fileTotalChunks[id] = static_cast<uint32_t>(
-                    common::Utils::ceilDiv(fileSizes[id], common::CHUNK_SIZE)
-                );
-            }
-
-            const size_t bitmapBytes = (totalChunks + 7) / 8;
-            resumeBitmap.assign(bitmapBytes, 0);
             const auto manifestHash = common::Utils::fnv1a64(manifestBuf.data(), manifestBuf.size());
-            const auto bitmapPath = std::filesystem::path(ReceiverConfig::out) / (
-                                        ".thruflux_resume_" + std::to_string(manifestHash) + ".bm");
-            resumeBitmapPath = bitmapPath.string();
+            auto statePath = std::filesystem::path(ReceiverConfig::out) /
+                             (".thruflux_resume_" + std::to_string(manifestHash) + ".state");
+            resumeStatePath = statePath.string();
 
             if (ReceiverConfig::overwrite) {
-                deleteResumeBitmap();
+                std::error_code ec;
+                std::filesystem::remove(statePath, ec);
+                resumeFileId = 0;
+                resumeOffset = 0;
             } else {
-                bool loaded = false;
-                if (std::filesystem::exists(bitmapPath)) {
-                    std::error_code ec;
-                    const auto sz = std::filesystem::file_size(bitmapPath, ec);
-                    if (!ec && sz == bitmapBytes) {
-                        std::ifstream in(bitmapPath, std::ios::binary);
+                if (std::filesystem::exists(statePath)) {
+                    resumeFileId = 0;
+                    resumeOffset = 0;
+                    {
+                        std::ifstream in(statePath, std::ios::binary);
                         if (in) {
-                            in.read(reinterpret_cast<char *>(resumeBitmap.data()),
-                                    static_cast<std::streamsize>(bitmapBytes));
-                            if (in.gcount() == static_cast<std::streamsize>(bitmapBytes)) {
-                                loaded = true;
-                            } else {
-                                resumeBitmap.assign(bitmapBytes, 0);
+                            uint32_t fid = 0;
+                            uint64_t off = 0;
+                            in.read(reinterpret_cast<char *>(&fid), sizeof(fid));
+                            in.read(reinterpret_cast<char *>(&off), sizeof(off));
+
+                            const bool ok =
+                                    in.good() &&
+                                    in.gcount() == static_cast<std::streamsize>(sizeof(off));
+
+                            if (ok && fid < fileSizes.size()) {
+                                resumeFileId = fid;
+                                resumeOffset = std::min<uint64_t>(off, fileSizes[fid]);
                             }
                         }
                     }
-                }
 
-                if (loaded) {
-                    filesMoved = 0;
-                    for (uint32_t id = 0; id < fileSizes.size(); ++id) {
-                        const uint64_t base = fileChunkBase[id];
-                        const uint32_t chunks = fileTotalChunks[id];
-
-                        uint32_t done = 0;
-                        for (uint32_t c = 0; c < chunks; ++c) {
-                            const uint64_t g = base + c;
-                            if (g < totalChunks && common::Utils::getBit(resumeBitmap, g)) done++;
-                        }
-                        fileDoneChunks[id] = done;
-
-                        if (chunks == 0 || done == chunks) {
-                            fileCountedDone[id] = 1;
-                            filesMoved++;
-                        }
+                    while (resumeFileId < fileSizes.size() && resumeOffset >= fileSizes[resumeFileId]) {
+                        resumeOffset = 0;
+                        ++resumeFileId;
+                    }
+                    if (resumeFileId >= fileSizes.size()) {
+                        resumeFileId = static_cast<uint32_t>(fileSizes.size());
+                        resumeOffset = 0;
                     }
 
-                    uint64_t resumedChunks = 0;
-                    const uint64_t fullBytes = totalChunks / 8;
-                    const uint32_t remBits = totalChunks % 8;
-
-                    for (uint64_t i = 0; i < fullBytes; ++i)
-                        resumedChunks += popcount32(resumeBitmap[i]);
-
-                    if (remBits) {
-                        const uint8_t mask = (1u << remBits) - 1u;
-                        resumedChunks += popcount32(static_cast<unsigned>(resumeBitmap[fullBytes] & mask));
+                    uint64_t resumedBytes = 0;
+                    for (uint32_t id = 0; id < resumeFileId && id < fileSizes.size(); ++id) {
+                        resumedBytes += fileSizes[id];
                     }
+                    resumedBytes += resumeOffset;
 
-                    const double percent =
-                            totalChunks == 0 ? 0.0 : (static_cast<double>(resumedChunks) / totalChunks) * 100.0;
-
-                    const auto resumedBytes = computeResumedBytes();
-
-                    spdlog::info(
-                        "Auto-resuming: {:.2f}% already present ({} / {}). Pass flag --overwrite to disable.",
-                        percent,
-                        common::Utils::sizeToReadableFormat(resumedBytes),
-                        common::Utils::sizeToReadableFormat(totalExpectedBytes),
-                        resumedChunks
-                    );
+                    const int resumedFiles = resumeFileId;
 
                     bytesMoved = resumedBytes;
                     lastBytesMoved = resumedBytes;
                     skippedBytes = resumedBytes;
+                    filesMoved = resumedFiles;
                 }
             }
 
@@ -183,103 +142,57 @@ namespace receiver {
                          common::Utils::sizeToReadableFormat(totalExpectedBytes));
         }
 
-        uint64_t computeResumedBytes() const {
-            uint64_t resumedBytes = 0;
+        void maybeSaveResumeState(bool force = false) {
+            if (!resumeDirty) return;
 
-            for (uint32_t id = 0; id < fileSizes.size(); ++id) {
-                const uint64_t sz = fileSizes[id];
-                if (sz == 0) continue;
-
-                const uint64_t base = fileChunkBase[id];
-                const uint64_t chunks = common::Utils::ceilDiv(sz, common::CHUNK_SIZE);
-                if (chunks == 0) continue;
-
-                const uint64_t fullChunks = chunks - 1;
-                const uint64_t lastChunkSize = sz - fullChunks * common::CHUNK_SIZE;
-
-                for (uint64_t c = 0; c < fullChunks; ++c) {
-                    const uint64_t g = base + c;
-                    if (g < totalChunks && common::Utils::getBit(resumeBitmap, g))
-                        resumedBytes += common::CHUNK_SIZE;
-                }
-
-                const uint64_t lastG = base + (chunks - 1);
-                if (lastG < totalChunks && common::Utils::getBit(resumeBitmap, lastG))
-                    resumedBytes += lastChunkSize;
-            }
-
-            if (resumedBytes > totalExpectedBytes) resumedBytes = totalExpectedBytes;
-            return resumedBytes;
-        }
-
-        void maybeSaveBitmap(bool force = false) {
-            if (!isResumeBitmapDirty) return;
-
-            const auto now = std::chrono::steady_clock::now();
-            const bool timeOk =
-                    (lastResumeBitmapFlush.time_since_epoch().count() == 0) ||
-                    (std::chrono::duration<double>(now - lastResumeBitmapFlush).count() >= 5.0);
-
+            auto now = std::chrono::steady_clock::now();
+            bool timeOk = (lastResumeFlush.time_since_epoch().count() == 0) ||
+                          (std::chrono::duration<double>(now - lastResumeFlush).count() >= 1.0);
             if (!force && !timeOk) return;
 
-            const std::string tmpPath = resumeBitmapPath + ".tmp";
-
-
-            std::ofstream out(tmpPath, std::ios::binary | std::ios::trunc);
+            const std::string tmp = resumeStatePath + ".tmp";
+            std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
             if (!out) return;
-            out.write(reinterpret_cast<const char *>(resumeBitmap.data()),
-                      static_cast<std::streamsize>(resumeBitmap.size()));
+
+            out.write(reinterpret_cast<const char *>(&resumeFileId), sizeof(resumeFileId));
+            out.write(reinterpret_cast<const char *>(&resumeOffset), sizeof(resumeOffset));
             out.flush();
 
-
             std::error_code ec;
-            std::filesystem::rename(tmpPath, resumeBitmapPath, ec);
+            std::filesystem::rename(tmp, resumeStatePath, ec);
             if (ec) {
-                std::filesystem::remove(resumeBitmapPath, ec);
+                std::filesystem::remove(resumeStatePath, ec);
                 ec.clear();
-                std::filesystem::rename(tmpPath, resumeBitmapPath, ec);
+                std::filesystem::rename(tmp, resumeStatePath, ec);
             }
 
-            isResumeBitmapDirty = false;
-            lastResumeBitmapFlush = now;
-        }
-
-
-        void deleteResumeBitmap() const {
-            if (resumeBitmapPath.empty()) return;
-            std::error_code ec;
-            if (std::filesystem::exists(resumeBitmapPath)) {
-                std::filesystem::remove(resumeBitmapPath, ec);
-                if (ec) {
-                    spdlog::warn("Failed to delete resume bitmap: {} ({})",
-                                 resumeBitmapPath, ec.message());
-                }
-            }
-            const std::string tmpPath = resumeBitmapPath + ".tmp";
-            if (std::filesystem::exists(tmpPath)) {
-                std::filesystem::remove(tmpPath, ec);
-                if (ec) {
-                    spdlog::warn("Failed to delete resume bitmap: {} ({})",
-                                 tmpPath, ec.message());
-                }
-            }
+            resumeDirty = false;
+            lastResumeFlush = now;
         }
     };
 
     struct ReceiverStreamContext {
         enum StreamType { UNKNOWN, MANIFEST, DATA } type = UNKNOWN;
 
-        bool readingHeader = true;
-        uint8_t headerBuf[16];
-        uint8_t headerBytesRead = 0;
-        uint64_t chunkOffset = 0;
-        uint32_t chunkLength = 0;
-        uint32_t bodyBytesRead = 0;
-        uint32_t fileId = 0;
-        uint8_t writeBuffer[common::CHUNK_SIZE];
-        blake3_hasher hasher;
+        uint32_t curFileId = 0;
+        uint64_t curOff = 0;
+        uint64_t curSize = 0;
         uint32_t pinnedFileId = UINT32_MAX;
-        llfio::file_handle* pinnedHandle = nullptr;
+        llfio::file_handle *pinnedHandle = nullptr;
+        uint8_t writeBuffer[common::CHUNK_SIZE];
 
+        bool openFile(ReceiverConnectionContext *connCtx, uint32_t fileId) {
+            if (fileId >= connCtx->fileSizes.size()) return false;
+            curFileId = fileId;
+            curSize = connCtx->fileSizes[fileId];
+
+            if (pinnedFileId != fileId) {
+                if (pinnedFileId != UINT32_MAX) connCtx->cache.release(pinnedFileId);
+                pinnedFileId = fileId;
+                pinnedHandle = connCtx->cache.acquire(fileId, true);
+                if (!pinnedHandle) return false;
+            }
+            return true;
+        }
     };
 }

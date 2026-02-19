@@ -8,6 +8,7 @@
 #include <indicators/multi_progress.hpp>
 #include <indicators/progress_bar.hpp>
 #include "../common/IceHandler.hpp"
+
 namespace sender {
     class SenderStream : public common::Stream {
         //unlike receiver, sender's progress reporter should run persistently
@@ -167,11 +168,14 @@ namespace sender {
                 if (!connCtx->manifestStreamCreated) {
                     ctx->isManifestStream = true;
                     connCtx->manifestStreamCreated = true;
-                } else {
+                } else if (!connCtx->dataStreamCreated) {
                     ctx->isManifestStream = false;
-                    if (!ctx->loadNextChunk()) {
-                        lsquic_stream_shutdown(stream, 1);
-                    }
+                    connCtx->dataStreamCreated = true;
+                    ctx->initialize();
+                } else {
+                    lsquic_stream_shutdown(stream, 1);
+                    delete ctx;
+                    return nullptr;
                 }
 
                 lsquic_stream_wantwrite(stream, 1);
@@ -194,40 +198,55 @@ namespace sender {
 
                     const uint8_t code = connCtx->ackBuf[0];
 
-                    if (code == common::RECEIVER_MANIFEST_RECEIVED_ACK && connCtx->ackBuf.size() >= 5) {
-                        uint32_t len = 0;
-                        memcpy(&len, connCtx->ackBuf.data() + 1, 4);
-                        const size_t need = 5ull + static_cast<size_t>(len);
-                        if (connCtx->ackBuf.size() < need) {
-                            return;
+                    if (code == common::RECEIVER_MANIFEST_RECEIVED_ACK) {
+                        const size_t need = 1 + 4 + 8;
+                        if (connCtx->ackBuf.size() < need) return;
+                        uint32_t fid = 0;
+                        uint64_t off = 0;
+                        memcpy(&fid, connCtx->ackBuf.data() + 1, 4);
+                        memcpy(&off, connCtx->ackBuf.data() + 5, 8);
+                        connCtx->ackBuf.erase(connCtx->ackBuf.begin(), connCtx->ackBuf.begin() + need);
+                        connCtx->resumeFileId = fid;
+                        connCtx->resumeOffset = off;
+
+                        if (connCtx->resumeFileId >= senderPersistentContext.files.size()) {
+                            connCtx->resumeFileId = 0;
+                            connCtx->resumeOffset = 0;
+                        } else {
+                            auto sz = senderPersistentContext.files[connCtx->resumeFileId].size;
+                            if (connCtx->resumeOffset > sz) connCtx->resumeOffset = sz;
+                            while (connCtx->resumeFileId < senderPersistentContext.files.size() &&
+                                   connCtx->resumeOffset >= senderPersistentContext.files[connCtx->resumeFileId].size) {
+                                connCtx->resumeOffset = 0;
+                                connCtx->resumeFileId++;
+                            }
                         }
-                        connCtx->resumeBitmap.assign(connCtx->ackBuf.begin() + 5,
-                                                     connCtx->ackBuf.begin() + need);
 
-                        connCtx->ackBuf.erase(connCtx->ackBuf.begin(),
-                                              connCtx->ackBuf.begin() + need);
+                        connCtx->currentFileIndex = connCtx->resumeFileId;
+                        connCtx->currentFileOffset = connCtx->resumeOffset;
 
+                        uint64_t resumedBytes = 0;
+                        for (uint32_t i = 0; i < connCtx->resumeFileId && i < senderPersistentContext.files.size(); ++i)
+                            resumedBytes += senderPersistentContext.files[i].size;
+                        resumedBytes += connCtx->resumeOffset;
+
+                        connCtx->logicalBytesMoved = resumedBytes;
+                        connCtx->skippedBytes = resumedBytes;
 
                         //Time to blast data!
                         if (!connCtx->started) {
                             auto &progressBar = senderPersistentContext.progressBars[connCtx->progressBarIndex];
-                            progressBar.set_option(
-                                indicators::option::PostfixText{"starting..."});
+                            progressBar.set_option(indicators::option::PostfixText{"starting..."});
                             progressBar.set_progress(0);
                             connCtx->started = true;
                             connCtx->startTime = std::chrono::steady_clock::now();
                         }
 
-
                         //save the manifest stream for reading future ack
                         connCtx->manifestStream = stream;
-
                         lsquic_stream_wantread(stream, 0);
-
-                        //Open all the streams
-                        for (int i = 0; i < SenderConfig::totalStreams; i++) {
-                            lsquic_conn_make_stream(connCtx->connection);
-                        }
+                        //Open data stream
+                        lsquic_conn_make_stream(connCtx->connection);
                     } else if (code == common::RECEIVER_TRANSFER_COMPLETE_ACK) {
                         connCtx->ackBuf.erase(connCtx->ackBuf.begin());
                         connCtx->complete = true;
@@ -243,6 +262,12 @@ namespace sender {
                 auto *ctx = reinterpret_cast<SenderStreamContext *>(h);
                 auto *connCtx = reinterpret_cast<SenderConnectionContext *>(lsquic_conn_get_ctx(
                     lsquic_stream_conn(stream)));
+
+                if (ctx->eofAll) {
+                    lsquic_stream_shutdown(stream, 1);
+                    lsquic_stream_wantread(connCtx->manifestStream, 1);
+                    return;
+                }
 
                 if (!ctx->typeByteSent) {
                     uint8_t tag = ctx->isManifestStream ? 0x00 : 0x01;
@@ -273,47 +298,35 @@ namespace sender {
                     return;
                 }
 
-
                 while (true) {
-                    if (ctx->sendingHeader) {
-                        size_t remaining = 16 - ctx->headerSent;
-                        ssize_t nw = lsquic_stream_write(stream, ctx->headerBuf + ctx->headerSent, remaining);
-                        if (nw <= 0) {
-                            return;
-                        }
-                        ctx->headerSent += nw;
-                        if (ctx->headerSent == 16) {
-                            ctx->sendingHeader = false;
-                        } else {
-                            return;
-                        }
-                    } else {
-                        if (ctx->readBuf.empty()) {
-                            spdlog::error("Unexpected error: chunkBuf missing for QUIC connection");
-                            lsquic_stream_close(stream);
-                            return;
-                        }
-
-                        size_t remaining = ctx->len - ctx->bytesSent;
-                        const uint8_t *ptr = ctx->readBuf.data() +
-                                             ctx->bytesSent;
-                        ssize_t nw = lsquic_stream_write(stream, ptr, remaining);
-                        if (nw <= 0) {
-                            break;
-                        }
-                        ctx->bytesSent += nw;
-                        connCtx->bytesMoved += nw;
-                        connCtx->logicalBytesMoved += nw;
-
-                        if (ctx->bytesSent >= ctx->len) {
-                            if (!ctx->loadNextChunk()) {
+                    if (ctx->bufSent >= ctx->bufReady) {
+                        if (ctx->fileOffset >= ctx->fileSize) {
+                            if (!ctx->advanceFile()) {
+                                //wait for receiver ACK
                                 lsquic_stream_shutdown(stream, 1);
-                                //now wait for receiver ACK
                                 lsquic_stream_wantread(connCtx->manifestStream, 1);
                                 return;
                             }
                         }
+                        if (!ctx->fillBuf()) {
+                            lsquic_stream_close(stream);
+                            return;
+                        }
                     }
+
+                    const uint8_t *ptr = ctx->readBuf.data() + ctx->bufSent;
+                    size_t remaining = ctx->bufReady - ctx->bufSent;
+
+                    ssize_t nw = lsquic_stream_write(stream, ptr, remaining);
+                    if (nw <= 0) return;
+
+                    ctx->bufSent += static_cast<size_t>(nw);
+                    ctx->fileOffset += static_cast<uint64_t>(nw);
+
+                    connCtx->currentFileOffset = ctx->fileOffset;
+
+                    connCtx->bytesMoved += nw;
+                    connCtx->logicalBytesMoved += nw;
                 }
             },
 
@@ -347,8 +360,8 @@ namespace sender {
             settings.es_versions = (1 << LSQVER_I001);
             settings.es_cc_algo = 2;
             settings.es_init_max_data = SenderConfig::quicConnWindowBytes;
-            settings.es_init_max_streams_uni = SenderConfig::quicMaxStreams;
-            settings.es_init_max_streams_bidi = SenderConfig::quicMaxStreams;
+            settings.es_init_max_streams_uni = 0;
+            settings.es_init_max_streams_bidi = 2;
             settings.es_idle_conn_to = 15000000;
             settings.es_init_max_stream_data_uni = SenderConfig::quicStreamWindowBytes;
             settings.es_init_max_stream_data_bidi_local = SenderConfig::quicStreamWindowBytes;
@@ -422,8 +435,7 @@ namespace sender {
                                                                (sockaddr *) &c->remoteAddr,
                                                                c, 0);
 
-                                           process();
-
+                                       process();
                                    },
                                    ctx
             );

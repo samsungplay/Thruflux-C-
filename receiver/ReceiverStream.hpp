@@ -86,7 +86,7 @@ namespace receiver {
                 receiverConnectionContext->lastTime = now;
                 receiverConnectionContext->lastBytesMoved = receiverConnectionContext->bytesMoved;
 
-                receiverConnectionContext->maybeSaveBitmap();
+                receiverConnectionContext->maybeSaveResumeState();
                 return G_SOURCE_CONTINUE;
             }, nullptr, nullptr);
         }
@@ -163,7 +163,9 @@ namespace receiver {
                         postfix += " [DONE]";
                         progressBar->set_option(indicators::option::PostfixText{postfix});
                         progressBar->set_progress(100);
-                        ctx->deleteResumeBitmap();
+                        //delete resume state
+                        std::error_code ec;
+                        std::filesystem::remove(ctx->resumeStatePath, ec);
                     } else {
                         const auto &progressBar = ctx->progressBar;
                         std::string postfix;
@@ -183,7 +185,7 @@ namespace receiver {
                         progressBar->set_option(
                             indicators::option::ForegroundColor{indicators::Color::red});
                         progressBar->mark_as_completed();
-                        ctx->maybeSaveBitmap(true);
+                        ctx->maybeSaveResumeState(true);
                     }
                     ctx->connection = nullptr;
                 }
@@ -206,6 +208,11 @@ namespace receiver {
                                         ? ReceiverStreamContext::MANIFEST
                                         : ReceiverStreamContext::DATA;
                         if (ctx->type == ReceiverStreamContext::DATA && !connCtx->started) {
+
+
+                            ctx->openFile(connCtx, connCtx->resumeFileId);
+                            ctx->curOff = connCtx->resumeOffset;
+
                             connCtx->startTime = std::chrono::steady_clock::now();
                             connCtx->progressBar->set_option(
                                 indicators::option::PostfixText{"starting..."});
@@ -262,110 +269,52 @@ namespace receiver {
                 }
 
                 while (true) {
-                    if (ctx->readingHeader) {
-                        size_t remaining = 16 - ctx->headerBytesRead;
-                        ssize_t nr = lsquic_stream_read(stream, ctx->headerBuf + ctx->headerBytesRead, remaining);
-                        if (nr <= 0) {
-                            return;
-                        }
+                    ssize_t nr = lsquic_stream_read(stream, ctx->writeBuffer, sizeof(ctx->writeBuffer));
+                    if (nr <= 0) break;
 
-                        ctx->headerBytesRead += nr;
+                    if (!ctx->pinnedHandle) { lsquic_stream_close(stream); return; }
 
+                    llfio::byte_io_handle::const_buffer_type reqBuf({
+                        reinterpret_cast<const llfio::byte *>(ctx->writeBuffer),
+                        (size_t)nr
+                    });
 
-                        if (ctx->headerBytesRead == 16) {
-                            memcpy(&ctx->chunkOffset, ctx->headerBuf, 8);
-                            memcpy(&ctx->chunkLength, ctx->headerBuf + 8, 4);
-                            memcpy(&ctx->fileId, ctx->headerBuf + 12, 4);
-                            if (ctx->pinnedFileId != ctx->fileId) {
-                                if (ctx->pinnedFileId != UINT32_MAX) {
-                                    connCtx->cache.release(ctx->pinnedFileId);
-                                }
-                                ctx->pinnedFileId = ctx->fileId;
-                                ctx->pinnedHandle = connCtx->cache.acquire(ctx->fileId, true);
-                                if (!ctx->pinnedHandle) {
-                                    spdlog::error("Failed to acquire file handle for fileId {} path='{}'",
-                                                  ctx->fileId, connCtx->cache.paths[ctx->fileId]);
-                                    lsquic_stream_close(stream);
-                                    return;
-                                }
-                            }
-                            ctx->readingHeader = false;
-                            ctx->bodyBytesRead = 0;
-                        } else {
-                            return;
-                        }
-                    } else {
-                        size_t remaining = ctx->chunkLength - ctx->bodyBytesRead;
-                        size_t readSize = std::min(sizeof(ctx->writeBuffer), remaining);
-                        ssize_t nr = lsquic_stream_read(stream, ctx->writeBuffer, readSize);
-                        if (nr <= 0) {
-                            break;
-                        }
+                    llfio::file_handle::io_request<llfio::file_handle::const_buffers_type> req(
+                        llfio::file_handle::const_buffers_type{&reqBuf, 1},
+                        ctx->curOff
+                    );
 
-                        if (!ctx->pinnedHandle) {
-                            spdlog::error("No pinned file handle");
+                    auto result = ctx->pinnedHandle->write(req);
+                    if (!result) { lsquic_stream_close(stream); return; }
+                    size_t nw = result.bytes_transferred();
+                    if (nw < static_cast<size_t>(nr)) { lsquic_stream_close(stream); return; }
+
+                    connCtx->bytesMoved += nw;
+                    ctx->curOff += nw;
+
+                    connCtx->resumeFileId = ctx->curFileId;
+                    connCtx->resumeOffset = ctx->curOff;
+                    connCtx->resumeDirty = true;
+
+                    while (ctx->curOff >= ctx->curSize && ctx->curFileId < connCtx->fileSizes.size()) {
+                        connCtx->filesMoved++;
+
+                        ctx->curFileId++;
+                        if (ctx->curFileId >= connCtx->fileSizes.size()) break;
+
+                        if (!ctx->openFile(connCtx, ctx->curFileId)) {
                             lsquic_stream_close(stream);
                             return;
                         }
+                        ctx->curOff = 0;
+                    }
 
-                        llfio::byte_io_handle::const_buffer_type reqBuf({
-                            reinterpret_cast<const llfio::byte *>(ctx->writeBuffer),
-                            static_cast<size_t>(nr)
-                        });
-
-                        llfio::file_handle::io_request<llfio::file_handle::const_buffers_type> req(
-                            llfio::file_handle::const_buffers_type{&reqBuf, 1},
-                            ctx->chunkOffset + ctx->bodyBytesRead
-                        );
-
-                        auto result = ctx->pinnedHandle->write(req);
-
-                        if (!result) {
-                            spdlog::error("Could not write file to disk {}", result.error().message());
-                            lsquic_stream_close(stream);
-                            return;
-                        }
-
-                        const auto nw = result.bytes_transferred();
-
-                        if (nw < nr) {
-                            spdlog::error("Unexpected partial write to disk; expected = {} written = {}", nr, nw);
-                            lsquic_stream_close(stream);
-                            return;
-                        }
-
-                        connCtx->bytesMoved += nw;
-
-                        ctx->bodyBytesRead += nw;
-
-                        if (ctx->bodyBytesRead >= ctx->chunkLength) {
-                            const uint64_t chunkInFile = ctx->chunkOffset / common::CHUNK_SIZE;
-                            const uint64_t globalChunk = connCtx->fileChunkBase[ctx->fileId] + chunkInFile;
-                            if (globalChunk < connCtx->totalChunks) {
-                                if (!common::Utils::getBit(connCtx->resumeBitmap, globalChunk)) {
-                                    common::Utils::setBit(connCtx->resumeBitmap, globalChunk);
-                                    connCtx->fileDoneChunks[ctx->fileId]++;
-                                    if (!connCtx->fileCountedDone[ctx->fileId] &&
-                                        connCtx->fileDoneChunks[ctx->fileId] == connCtx->fileTotalChunks[ctx->fileId]) {
-                                        connCtx->fileCountedDone[ctx->fileId] = 1;
-                                        connCtx->filesMoved++;
-                                    }
-                                    connCtx->isResumeBitmapDirty = true;
-                                }
-                            }
-
-                            ctx->readingHeader = true;
-                            ctx->headerBytesRead = 0;
-                        }
-
-                        if (!connCtx->complete && connCtx->filesMoved == connCtx->totalExpectedFilesCount) {
-                            //transfer complete. needs to send ACK to sender..
-                            connCtx->complete = true;
-                            connCtx->pendingCompleteAck = true;
-                            lsquic_stream_wantwrite(connCtx->manifestStream, 1);
-                            lsquic_stream_wantread(stream, 0);
-                            return;
-                        }
+                    if (!connCtx->complete && connCtx->filesMoved == connCtx->totalExpectedFilesCount) {
+                        connCtx->complete = true;
+                        connCtx->pendingCompleteAck = true;
+                        lsquic_stream_wantwrite(connCtx->manifestStream, 1);
+                        lsquic_stream_wantread(stream, 0);
+                        return;
                     }
                 }
             },
@@ -376,30 +325,15 @@ namespace receiver {
 
                 if (ctx->type == ReceiverStreamContext::MANIFEST) {
                     if (connCtx->pendingManifestAck) {
-                        uint8_t ack = common::RECEIVER_MANIFEST_RECEIVED_ACK;
-                        uint32_t len = static_cast<uint32_t>(connCtx->resumeBitmap.size());
-                        uint8_t hdr[5];
-                        hdr[0] = ack;
-                        memcpy(hdr + 1, &len, 4);
-                        const uint8_t *src = nullptr;
-                        size_t remaining = 0;
+                        uint8_t ackbuf[1 + 4 + 8];
+                        ackbuf[0] = common::RECEIVER_MANIFEST_RECEIVED_ACK;
+                        memcpy(ackbuf + 1, &connCtx->resumeFileId, 4);
+                        memcpy(ackbuf + 5, &connCtx->resumeOffset, 8);
 
-                        if (connCtx->manifestAckSent < 5) {
-                            src = hdr + connCtx->manifestAckSent;
-                            remaining = 5 - connCtx->manifestAckSent;
-                        } else {
-                            const size_t payloadOff = connCtx->manifestAckSent - 5;
-                            src = connCtx->resumeBitmap.data() + payloadOff;
-                            remaining = connCtx->resumeBitmap.size() - payloadOff;
-                        }
-
-                        const ssize_t nw = lsquic_stream_write(stream, src, remaining);
-
-                        if (nw > 0) {
-                            connCtx->manifestAckSent += nw;
-                        }
-
-                        const auto total = 5ull + connCtx->resumeBitmap.size();
+                        const size_t total = sizeof(ackbuf);
+                        const size_t sent = connCtx->manifestAckSent;
+                        const ssize_t nw = lsquic_stream_write(stream, ackbuf + sent, total - sent);
+                        if (nw > 0) connCtx->manifestAckSent += nw;
 
                         if (connCtx->manifestAckSent >= total) {
                             lsquic_stream_flush(stream);
@@ -448,8 +382,8 @@ namespace receiver {
             settings.es_versions = (1 << LSQVER_I001);
             settings.es_cc_algo = 2;
             settings.es_init_max_data = ReceiverConfig::quicConnWindowBytes;
-            settings.es_init_max_streams_uni = ReceiverConfig::quicMaxStreams;
-            settings.es_init_max_streams_bidi = ReceiverConfig::quicMaxStreams;
+            settings.es_init_max_streams_uni = 0;
+            settings.es_init_max_streams_bidi = 2;
             settings.es_idle_conn_to = 30000000;
             settings.es_init_max_stream_data_uni = ReceiverConfig::quicStreamWindowBytes;
             settings.es_init_max_stream_data_bidi_local = ReceiverConfig::quicStreamWindowBytes;
