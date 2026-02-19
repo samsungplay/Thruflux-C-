@@ -276,7 +276,7 @@ namespace receiver {
         uint32_t chunkLength = 0;
         uint32_t bodyBytesRead = 0;
         uint32_t fileId = 0;
-        uint8_t writeBuffer[1024 * 1024];
+        uint8_t writeBuffer[common::CHUNK_SIZE];
         blake3_hasher hasher;
         uint32_t pinnedFileId = UINT32_MAX;
         llfio::file_handle* pinnedHandle = nullptr;
