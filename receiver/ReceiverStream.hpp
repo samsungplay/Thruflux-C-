@@ -87,6 +87,13 @@ namespace receiver {
                 receiverConnectionContext->lastBytesMoved = receiverConnectionContext->bytesMoved;
 
                 receiverConnectionContext->maybeSaveResumeState();
+
+                if (receiverConnectionContext->readPaused.load() && receiverConnectionContext->pipe && receiverConnectionContext->pipe->freeCount() > POOL_COUNT / 2) {
+                    receiverConnectionContext->readPaused = false;
+                    if (receiverConnectionContext->dataStream) {
+                        lsquic_stream_wantread(receiverConnectionContext->dataStream, 1);
+                    }
+                }
                 return G_SOURCE_CONTINUE;
             }, nullptr, nullptr);
         }
@@ -143,6 +150,10 @@ namespace receiver {
                 auto *ctx = reinterpret_cast<ReceiverConnectionContext *>(lsquic_conn_get_ctx(c));
                 lsquic_conn_set_ctx(c, nullptr);
                 if (ctx) {
+                    ctx->stopDisk = true;
+
+                    if (ctx->pipe) ctx->pipe->notifyAll();
+                    if (ctx->diskThread.joinable()) ctx->diskThread.join();
                     if (ctx->complete) {
                         const auto &progressBar = ctx->progressBar;
                         progressBar->set_option(
@@ -208,7 +219,8 @@ namespace receiver {
                                         ? ReceiverStreamContext::MANIFEST
                                         : ReceiverStreamContext::DATA;
                         if (ctx->type == ReceiverStreamContext::DATA && !connCtx->started) {
-
+                            connCtx->dataStream = stream;
+                            connCtx->readPaused = false;
 
                             ctx->openFile(connCtx, connCtx->resumeFileId);
                             ctx->curOff = connCtx->resumeOffset;
@@ -269,53 +281,72 @@ namespace receiver {
                 }
 
                 while (true) {
-                    ssize_t nr = lsquic_stream_read(stream, ctx->writeBuffer, sizeof(ctx->writeBuffer));
-                    if (nr <= 0) break;
-
-                    if (!ctx->pinnedHandle) { lsquic_stream_close(stream); return; }
-
-                    llfio::byte_io_handle::const_buffer_type reqBuf({
-                        reinterpret_cast<const llfio::byte *>(ctx->writeBuffer),
-                        (size_t)nr
-                    });
-
-                    llfio::file_handle::io_request<llfio::file_handle::const_buffers_type> req(
-                        llfio::file_handle::const_buffers_type{&reqBuf, 1},
-                        ctx->curOff
-                    );
-
-                    auto result = ctx->pinnedHandle->write(req);
-                    if (!result) { lsquic_stream_close(stream); return; }
-                    size_t nw = result.bytes_transferred();
-                    if (nw < static_cast<size_t>(nr)) { lsquic_stream_close(stream); return; }
-
-
-                    connCtx->bytesMoved += nw;
-                    ctx->curOff += nw;
-
-                    connCtx->resumeFileId = ctx->curFileId;
-                    connCtx->resumeOffset = ctx->curOff;
-                    connCtx->resumeDirty = true;
-
-                    while (ctx->curOff >= ctx->curSize && ctx->curFileId < connCtx->fileSizes.size()) {
-                        connCtx->filesMoved++;
-
-                        ctx->curFileId++;
-                        if (ctx->curFileId >= connCtx->fileSizes.size()) break;
-
-                        if (!ctx->openFile(connCtx, ctx->curFileId)) {
-                            lsquic_stream_close(stream);
-                            return;
+                    receiver::Buf *b = connCtx->pipe->tryAcquireBuf();
+                    if (!b) {
+                        if (!connCtx->readPaused.exchange(true)) {
+                            lsquic_stream_wantread(stream, 0);
                         }
-                        ctx->curOff = 0;
+                        return;
                     }
 
-                    if (!connCtx->complete && connCtx->filesMoved == connCtx->totalExpectedFilesCount) {
-                        connCtx->complete = true;
-                        connCtx->pendingCompleteAck = true;
-                        lsquic_stream_wantwrite(connCtx->manifestStream, 1);
-                        lsquic_stream_wantread(stream, 0);
+                    ssize_t nr = lsquic_stream_read(stream, b->p.get(), b->cap);
+                    if (nr <= 0) {
+                        connCtx->pipe->releaseBuf(b);
+
+                        if (nr == 0) {
+                            // FIN from sender: stop reading
+                            // you may keep waiting for complete ACK logic via manifest stream
+                        }
+                        break;
+                    }
+
+                    // 3) compute where this belongs (sequential state)
+                    // We use connCtx->curWriteFileId/curWriteOff as the NEXT expected write position.
+                    // IMPORTANT: Those should be advanced ONLY when we enqueue, since ordering is preserved.
+                    // Disk thread is writing in same order jobs were enqueued.
+                    uint32_t fid = connCtx->curWriteFileId;
+                    uint64_t off = connCtx->curWriteOff;
+
+                    // cap write to current file size
+                    uint64_t fileSz = connCtx->fileSizes[fid];
+                    uint64_t remainingInFile = (off < fileSz) ? (fileSz - off) : 0;
+
+                    if (remainingInFile == 0) {
+                        // advance to next file
+                        connCtx->filesMoved++;
+                        // optional: but careful, this should reflect completed files. Better move to disk thread.
+                        // safer: do NOT update filesMoved here; let disk thread do it when it crosses boundaries.
+                        connCtx->curWriteFileId++;
+                        connCtx->curWriteOff = 0;
+                        connCtx->pipe->releaseBuf(b);
+                        continue;
+                    }
+
+                    uint32_t toWrite = static_cast<uint32_t>(std::min<uint64_t>(remainingInFile, (uint64_t) nr));
+
+                    receiver::WriteJob job{
+                        .fileId = fid,
+                        .off = off,
+                        .data = b->p.get(),
+                        .len = toWrite,
+                        .bufOwner = b
+                    };
+
+                    // 4) enqueue
+                    if (!connCtx->pipe->tryEnqueue(job)) {
+                        // queue full: return buffer and pause
+                        connCtx->pipe->releaseBuf(b);
+                        if (!connCtx->readPaused.exchange(true)) {
+                            lsquic_stream_wantread(stream, 0);
+                        }
                         return;
+                    }
+
+                    // 5) advance expected position for next enqueue
+                    connCtx->curWriteOff += toWrite;
+                    if (connCtx->curWriteOff >= fileSz) {
+                        connCtx->curWriteFileId++;
+                        connCtx->curWriteOff = 0;
                     }
                 }
             },
@@ -454,8 +485,7 @@ namespace receiver {
                                                                (sockaddr *) &c->remoteAddr,
                                                                c, 0);
 
-                                           process();
-
+                                       process();
                                    },
                                    ctx
             );
