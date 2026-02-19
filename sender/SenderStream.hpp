@@ -345,7 +345,7 @@ namespace sender {
             lsquic_engine_settings settings;
             lsquic_engine_init_settings(&settings, 0);
             settings.es_versions = (1 << LSQVER_I001);
-            settings.es_cc_algo = 2;
+            settings.es_cc_algo = 1;
             settings.es_init_max_data = SenderConfig::quicConnWindowBytes;
             settings.es_init_max_streams_uni = SenderConfig::quicMaxStreams;
             settings.es_init_max_streams_bidi = SenderConfig::quicMaxStreams;
@@ -421,7 +421,6 @@ namespace sender {
                                                                (sockaddr *) &c->localAddr,
                                                                (sockaddr *) &c->remoteAddr,
                                                                c, 0);
-
 
                                            process();
 
