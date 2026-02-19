@@ -257,7 +257,6 @@ namespace sender {
 
 
                 if (ctx->isManifestStream) {
-
                     size_t total = senderPersistentContext.manifestBlob.size();
                     size_t sent = connCtx->manifestSent;
                     if (sent < total) {
@@ -398,9 +397,13 @@ namespace sender {
             ctx->streamId = streamId;
             ctx->receiverId = receiverId;
             ctx->progressBarIndex = senderPersistentContext.addNewProgressBar("Receiver ID: " + ctx->receiverId);
-            ctx->connectionType = (local->type == NICE_CANDIDATE_TYPE_RELAYED || remote->type == NICE_CANDIDATE_TYPE_RELAYED) ? common::ConnectionContext::RELAYED : common::ConnectionContext::DIRECT;
+            ctx->connectionType = (local->type == NICE_CANDIDATE_TYPE_RELAYED || remote->type ==
+                                   NICE_CANDIDATE_TYPE_RELAYED)
+                                      ? common::ConnectionContext::RELAYED
+                                      : common::ConnectionContext::DIRECT;
             if (ctx->connectionType == common::ConnectionContext::RELAYED) {
-                senderPersistentContext.progressBars[ctx->progressBarIndex].set_option(indicators::option::ForegroundColor{indicators::Color::yellow});
+                senderPersistentContext.progressBars[ctx->progressBarIndex].set_option(
+                    indicators::option::ForegroundColor{indicators::Color::yellow});
             }
 
             nice_address_copy_to_sockaddr(&local->addr, reinterpret_cast<sockaddr *>(&ctx->localAddr));
@@ -420,7 +423,13 @@ namespace sender {
                                                                (sockaddr *) &c->remoteAddr,
                                                                c, 0);
 
-                                       process();
+                                       static auto lastTimestamp = std::chrono::steady_clock::now();
+                                       auto now = std::chrono::steady_clock::now();
+
+                                       if (now - lastTimestamp > std::chrono::milliseconds(1)) {
+                                           process();
+                                           lastTimestamp = now;
+                                       }
                                    },
                                    ctx
             );
@@ -435,9 +444,6 @@ namespace sender {
                 nullptr,
                 "thruflux.local", 0, nullptr, 0, nullptr, 0
             );
-
-
-
         }
 
 

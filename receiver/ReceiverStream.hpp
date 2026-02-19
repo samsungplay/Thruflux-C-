@@ -234,8 +234,7 @@ namespace receiver {
                                 connCtx->manifestProgressBar.print_progress();
                                 connCtx->lastManifestProgressPrint = now;
                             }
-                        }
-                        else if (nr == 0) {
+                        } else if (nr == 0) {
                             std::string postfix;
                             postfix.reserve(64);
                             postfix += common::Utils::sizeToReadableFormat((double) connCtx->manifestBuf.size());
@@ -251,13 +250,12 @@ namespace receiver {
                             //no reading
                             lsquic_stream_wantread(stream, 0);
                             break;
-                        }
-                         else {
-                             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                                 break;
-                             }
-                             spdlog::error("Unexpected error while reading manifest stream: error code={}", errno);
-                             break;
+                        } else {
+                            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                                break;
+                            }
+                            spdlog::error("Unexpected error while reading manifest stream: error code={}", errno);
+                            break;
                         }
                     }
                     return;
@@ -519,7 +517,13 @@ namespace receiver {
                                                                (sockaddr *) &c->localAddr,
                                                                (sockaddr *) &c->remoteAddr,
                                                                c, 0);
-                                       process();
+                                       static auto lastTimestamp = std::chrono::steady_clock::now();
+                                       auto now = std::chrono::steady_clock::now();
+
+                                       if (now - lastTimestamp > std::chrono::milliseconds(1)) {
+                                           process();
+                                           lastTimestamp = now;
+                                       }
                                    },
                                    ctx
             );
