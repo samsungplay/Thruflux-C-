@@ -19,6 +19,9 @@ static int popcount32(unsigned int x) {
 
 namespace receiver {
 
+    inline static constexpr size_t STAGE_CAP = 16 * 1024 * 1024;
+    inline static constexpr size_t FLUSH_AT  =  8 * 1024 * 1024;
+
     struct ReceiverConnectionContext : common::ConnectionContext {
         std::chrono::steady_clock::time_point lastResumeFlush{};
         bool resumeDirty = false;
@@ -179,8 +182,7 @@ namespace receiver {
         std::vector<uint8_t> stage;
         size_t stageLen = 0;
         uint64_t stageBaseOff = 0;
-        static constexpr size_t STAGE_CAP = 16 * 1024 * 1024;
-        static constexpr size_t FLUSH_AT  =  8 * 1024 * 1024;
+
 
         uint32_t curFileId = 0;
         uint64_t curOff = 0;
