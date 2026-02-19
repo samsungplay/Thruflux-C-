@@ -153,9 +153,9 @@ namespace common {
 
             for (int i = 1; i <= n; i++) {
                 nice_agent_set_port_range(agent, stream_id, i, 49152, 65535);
-                nice_agent_attach_recv(agent, stream_id, i, ThreadManager::getContext(),
-                                       [](NiceAgent *, guint, guint, guint, gchar *, gpointer) {
-                                       }, nullptr);
+                // nice_agent_attach_recv(agent, stream_id, i, ThreadManager::getContext(),
+                //                        [](NiceAgent *, guint, guint, guint, gchar *, gpointer) {
+                //                        }, nullptr);
             }
             for (const auto &turn: turnServers_) {
                 for (int i = 1; i <= n; i++) {
