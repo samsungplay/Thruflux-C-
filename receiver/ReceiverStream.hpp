@@ -309,25 +309,26 @@ namespace receiver {
                             return;
                         }
 
-                        llfio::byte_io_handle::const_buffer_type reqBuf({
-                            reinterpret_cast<const llfio::byte *>(ctx->writeBuffer),
-                            static_cast<size_t>(nr)
-                        });
+                        // llfio::byte_io_handle::const_buffer_type reqBuf({
+                        //     reinterpret_cast<const llfio::byte *>(ctx->writeBuffer),
+                        //     static_cast<size_t>(nr)
+                        // });
+                        //
+                        // llfio::file_handle::io_request<llfio::file_handle::const_buffers_type> req(
+                        //     llfio::file_handle::const_buffers_type{&reqBuf, 1},
+                        //     ctx->chunkOffset + ctx->bodyBytesRead
+                        // );
+                        //
+                        // auto result = ctx->pinnedHandle->write(req);
+                        //
+                        // if (!result) {
+                        //     spdlog::error("Could not write file to disk {}", result.error().message());
+                        //     lsquic_stream_close(stream);
+                        //     return;
+                        // }
 
-                        llfio::file_handle::io_request<llfio::file_handle::const_buffers_type> req(
-                            llfio::file_handle::const_buffers_type{&reqBuf, 1},
-                            ctx->chunkOffset + ctx->bodyBytesRead
-                        );
-
-                        auto result = ctx->pinnedHandle->write(req);
-
-                        if (!result) {
-                            spdlog::error("Could not write file to disk {}", result.error().message());
-                            lsquic_stream_close(stream);
-                            return;
-                        }
-
-                        const auto nw = result.bytes_transferred();
+                        // const auto nw =
+                        const auto nw = nr;
 
                         if (nw < nr) {
                             spdlog::error("Unexpected partial write to disk; expected = {} written = {}", nr, nw);
