@@ -102,7 +102,7 @@ namespace common {
             unsigned totalSent = 0;
             unsigned i = 0;
 
-            static constexpr unsigned MAX_BATCH = 64;
+            static constexpr unsigned MAX_BATCH = 128;
             static constexpr unsigned MAX_VECTORS = MAX_BATCH * 8;
             NiceOutputMessage niceMessages[MAX_BATCH];
             GOutputVector niceVectors[MAX_VECTORS];
@@ -152,6 +152,8 @@ namespace common {
                     nullptr
                 ) : -1;
 
+                process()
+;
 
                 if (nSent < 0) {
                     break;
