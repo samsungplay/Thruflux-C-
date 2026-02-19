@@ -281,7 +281,7 @@ namespace sender {
                 // if (bytesRead < len) {
                 //     spdlog::error("Unexpected EOF on fileId {} at offset {}. Read {}/{} bytes",
                 //                   fileId, offset + bytesRead, bytesRead, len);
-                //     return false;
+                //     return false;s
                 // }
                 std::memset(readBuf.data(), 0xAB, len);
 
