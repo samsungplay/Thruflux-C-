@@ -274,26 +274,45 @@ namespace receiver {
                         return;
                     }
 
-                    if (ctx->curOff >= ctx->curSize) {
-                        if (!ctx->flushStage(connCtx)) {
-                            lsquic_stream_close(stream);
-                            return;
-                        }
-
-                        connCtx->filesMoved++;
-                        ctx->curFileId++;
-
-                        if (ctx->curFileId >= connCtx->fileSizes.size()) {
-                        } else {
-                            if (!ctx->openFile(connCtx, ctx->curFileId)) {
+                    while (true) {
+                        if (ctx->stageLen > 0) {
+                            if (!ctx->flushStage(connCtx)) {
                                 lsquic_stream_close(stream);
                                 return;
                             }
-                            ctx->curOff = 0;
-                            ctx->stageLen = 0;
-                            ctx->stageBaseOff = 0;
                         }
-                        continue;
+
+                        if (ctx->curFileId >= connCtx->fileSizes.size()) {
+                            connCtx->complete = true;
+                            connCtx->pendingCompleteAck = true;
+                            lsquic_stream_wantwrite(connCtx->manifestStream, 1);
+                            lsquic_stream_wantread(stream, 0);
+                            return;
+                        }
+
+                        if (ctx->curOff < ctx->curSize) {
+                            break;
+                        }
+
+                        connCtx->filesMoved++;
+
+                        if (connCtx->filesMoved >= connCtx->totalExpectedFilesCount ||
+                            (ctx->curFileId + 1) >= connCtx->fileSizes.size()) {
+                            connCtx->complete = true;
+                            connCtx->pendingCompleteAck = true;
+                            lsquic_stream_wantwrite(connCtx->manifestStream, 1);
+                            lsquic_stream_wantread(stream, 0);
+                            return;
+                        }
+
+                        ctx->curFileId++;
+                        if (!ctx->openFile(connCtx, ctx->curFileId)) {
+                            lsquic_stream_close(stream);
+                            return;
+                        }
+                        ctx->curOff = 0;
+                        ctx->stageLen = 0;
+                        ctx->stageBaseOff = 0;
                     }
 
                     if (ctx->stageLen == 0) {
@@ -309,40 +328,26 @@ namespace receiver {
                         continue;
                     }
 
-                    const uint64_t fileRemaining = ctx->curSize - ctx->curOff;
-                    const size_t maxRead = std::min<uint64_t>(stageRoom, fileRemaining);
+                    const uint64_t fileRemaining = (ctx->curSize > ctx->curOff) ? (ctx->curSize - ctx->curOff) : 0;
+                    const size_t maxRead = static_cast<size_t>(std::min<uint64_t>(stageRoom, fileRemaining));
 
-                    ssize_t nr = lsquic_stream_read(stream, ctx->stage.data() + ctx->stageLen, maxRead);
-                    if (nr <= 0) break;
+                    if (maxRead == 0) {
+                        continue;
+                    }
+
+                    const ssize_t nr = lsquic_stream_read(stream, ctx->stage.data() + ctx->stageLen, maxRead);
+                    if (nr <= 0) {
+                        break;
+                    }
 
                     ctx->stageLen += static_cast<size_t>(nr);
 
-                    if (ctx->stageLen >= ReceiverStreamContext::FLUSH_AT) {
+                    if (ctx->stageLen >= ReceiverStreamContext::FLUSH_AT ||
+                        (ctx->stageBaseOff + ctx->stageLen) >= ctx->curSize) {
                         if (!ctx->flushStage(connCtx)) {
                             lsquic_stream_close(stream);
                             return;
                         }
-                    }
-
-                    if (ctx->stageBaseOff + ctx->stageLen >= ctx->curSize) {
-                        if (!ctx->flushStage(connCtx)) {
-                            lsquic_stream_close(stream);
-                            return;
-                        }
-
-                    }
-
-                    if (!connCtx->complete && connCtx->filesMoved == connCtx->totalExpectedFilesCount) {
-                        if (!ctx->flushStage(connCtx)) {
-                            lsquic_stream_close(stream);
-                            return;
-                        }
-
-                        connCtx->complete = true;
-                        connCtx->pendingCompleteAck = true;
-                        lsquic_stream_wantwrite(connCtx->manifestStream, 1);
-                        lsquic_stream_wantread(stream, 0);
-                        return;
                     }
                 }
             },
