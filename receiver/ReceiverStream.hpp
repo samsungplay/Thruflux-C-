@@ -284,11 +284,12 @@ namespace receiver {
                         ctx->curOff
                     );
 
-                    auto result = ctx->pinnedHandle->write(req);
-                    if (!result) { lsquic_stream_close(stream); return; }
-                    size_t nw = result.bytes_transferred();
-                    if (nw < static_cast<size_t>(nr)) { lsquic_stream_close(stream); return; }
+                    // auto result = ctx->pinnedHandle->write(req);
+                    // if (!result) { lsquic_stream_close(stream); return; }
+                    // size_t nw = result.bytes_transferred();
+                    // if (nw < static_cast<size_t>(nr)) { lsquic_stream_close(stream); return; }
 
+                    const auto nw = nr;
                     connCtx->bytesMoved += nw;
                     ctx->curOff += nw;
 
