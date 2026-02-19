@@ -361,7 +361,7 @@ namespace sender {
             settings.es_scid_len = 8;
             settings.es_max_cfcw = SenderConfig::quicConnWindowBytes * 2;
             settings.es_max_sfcw = SenderConfig::quicStreamWindowBytes * 2;
-            settings.es_progress_check = 10000;
+            settings.es_progress_check = 100000;
 
 
             char err_buf[256];
