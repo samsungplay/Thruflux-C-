@@ -15,8 +15,95 @@ static int popcount32(unsigned int x) {
 }
 #endif
 
+#include <system_error>
+#include <filesystem>
+#include <cstdint>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
+#if defined(__APPLE__) || defined(__linux__)
+#include <sys/types.h>
+#include <sys/stat.h>
+// posix_fallocate is available on Linux; on macOS it's available but sometimes behaves differently.
+// We'll try it when available, otherwise fall back.
+#if defined(__linux__) || defined(__APPLE__)
+#include <fcntl.h>   // posix_fallocate
+#endif
+#endif
+#endif
+
+
+static bool thruflux_preallocate_file_best_effort(const std::filesystem::path &path, uint64_t sizeBytes) {
+    if (sizeBytes == 0) return true;
+
+#ifdef _WIN32
+    // Best-effort: set file length to sizeBytes (doesn't guarantee physical allocation like posix_fallocate).
+    // Still helps reduce metadata churn during streaming.
+    HANDLE h = CreateFileW(
+        path.wstring().c_str(),
+        GENERIC_WRITE,
+        FILE_SHARE_READ,
+        nullptr,
+        OPEN_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr
+    );
+    if (h == INVALID_HANDLE_VALUE) return false;
+
+    LARGE_INTEGER li;
+    li.QuadPart = static_cast<LONGLONG>(sizeBytes);
+
+    bool ok = true;
+    if (!SetFilePointerEx(h, li, nullptr, FILE_BEGIN)) ok = false;
+    if (ok && !SetEndOfFile(h)) ok = false;
+
+    CloseHandle(h);
+    return ok;
+
+#else
+    int fd = ::open(path.c_str(), O_RDWR | O_CREAT, 0644);
+    if (fd < 0) return false;
+
+    bool ok = false;
+
+#if defined(__linux__)
+    // Standard Linux approach
+    ok = (::posix_fallocate(fd, 0, static_cast<off_t>(sizeBytes)) == 0);
+#elif defined(__APPLE__)
+    // macOS specific pre-allocation
+    fstore_t store = {F_ALLOCATECONTIG | F_ALLOCATEALL, F_PEOFPOSMODE, 0, static_cast<off_t>(sizeBytes), 0};
+    // Try to allocate contiguous space first
+    if (::fcntl(fd, F_PREALLOCATE, &store) == -1) {
+        // Fallback to non-contiguous allocation if contiguous fails
+        store.fst_flags = F_ALLOCATEALL;
+        if (::fcntl(fd, F_PREALLOCATE, &store) == -1) {
+            ok = false;
+        } else {
+            ok = true;
+        }
+    } else {
+        ok = true;
+    }
+#endif
+
+    // Final fallback: ftruncate to ensure the file size is set even if preallocation fails
+    if (!ok) {
+        ok = (::ftruncate(fd, static_cast<off_t>(sizeBytes)) == 0);
+    }
+
+    ::close(fd);
+    return ok;
+#endif
+}
+
 
 namespace receiver {
+    static constexpr uint64_t PREALLOC_THRESHOLD = 64ull * 1024 * 1024; // 64 MiB
     struct ReceiverConnectionContext : common::ConnectionContext {
         std::chrono::steady_clock::time_point lastResumeFlush{};
         bool resumeDirty = false;
@@ -76,6 +163,24 @@ namespace receiver {
 
                 std::filesystem::path full = std::filesystem::path(ReceiverConfig::out) / relativePath;
                 std::filesystem::create_directories(full.parent_path());
+
+                if (!ReceiverConfig::overwrite) {
+                    std::error_code ec;
+                    uint64_t existing = 0;
+                    if (std::filesystem::exists(full, ec) && !ec) {
+                        existing = static_cast<uint64_t>(std::filesystem::file_size(full, ec));
+                        if (ec) existing = 0;
+                    }
+
+                    if (sz >= PREALLOC_THRESHOLD && existing != sz) {
+                        (void)thruflux_preallocate_file_best_effort(full, sz);
+                    }
+                } else {
+                    if (sz >= PREALLOC_THRESHOLD) {
+                        (void)thruflux_preallocate_file_best_effort(full, sz);
+                    }
+                }
+
                 cache.registerPath(id, full.string());
             }
 

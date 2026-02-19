@@ -205,8 +205,6 @@ namespace sender {
         void initialize() {
             if (readBuf.empty()) readBuf.resize(common::CHUNK_SIZE);
 
-            std::memset(readBuf.data(), 0xAC, common::CHUNK_SIZE);
-
             if (!openCurrentFile()) {
                 eofAll = true;
                 return;
@@ -256,23 +254,22 @@ namespace sender {
         bool fillBuf() {
             if (!pinnedHandle) return false;
             if (fileOffset >= fileSize) return true;
-            //
+
             const size_t len = std::min<uint64_t>(readBuf.size(), fileSize - fileOffset);
-            //
-            // llfio::byte_io_handle::buffer_type reqBuf({
-            //     reinterpret_cast<llfio::byte *>(readBuf.data()),
-            //     len
-            // });
-            // llfio::file_handle::io_request<llfio::file_handle::buffers_type> req(
-            //     llfio::file_handle::buffers_type{&reqBuf, 1},
-            //     fileOffset
-            // );
 
-            // auto result = pinnedHandle->read(req);
-            // if (!result) return false;
+            llfio::byte_io_handle::buffer_type reqBuf({
+                reinterpret_cast<llfio::byte *>(readBuf.data()),
+                len
+            });
+            llfio::file_handle::io_request<llfio::file_handle::buffers_type> req(
+                llfio::file_handle::buffers_type{&reqBuf, 1},
+                fileOffset
+            );
 
-            // const auto got = result.bytes_transferred();
-            const auto got = len;
+            auto result = pinnedHandle->read(req);
+            if (!result) return false;
+
+            const auto got = result.bytes_transferred();
 
             if (got == 0) return false;
 
