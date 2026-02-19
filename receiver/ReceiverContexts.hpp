@@ -179,7 +179,7 @@ namespace receiver {
         uint64_t curSize = 0;
         uint32_t pinnedFileId = UINT32_MAX;
         llfio::file_handle *pinnedHandle = nullptr;
-        uint8_t writeBuffer[common::CHUNK_SIZE];
+        uint8_t writeBuffer[256 * 1024];
 
         bool openFile(ReceiverConnectionContext *connCtx, uint32_t fileId) {
             if (fileId >= connCtx->fileSizes.size()) return false;
