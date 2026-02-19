@@ -458,7 +458,7 @@ namespace receiver {
             settings.es_allow_migration = 0;
             settings.es_pace_packets = 1;
             settings.es_delayed_acks = 0;
-            settings.es_max_batch_size = 64;
+            settings.es_max_batch_size = 256;
             settings.es_scid_len = 8;
             settings.es_max_cfcw = ReceiverConfig::quicConnWindowBytes * 2;
             settings.es_max_sfcw = ReceiverConfig::quicStreamWindowBytes * 2;
@@ -518,7 +518,6 @@ namespace receiver {
                                                                (sockaddr *) &c->remoteAddr,
                                                                c, 0);
 
-                                       for (int i=0;i<4; i++)
                                            process();
 
                                    },
