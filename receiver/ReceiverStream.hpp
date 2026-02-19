@@ -304,39 +304,37 @@ namespace receiver {
                             break;
                         }
 
-                        // if (!ctx->pinnedHandle) {
-                        //     spdlog::error("No pinned file handle");
-                        //     lsquic_stream_close(stream);
-                        //     return;
-                        // }
-                        //
-                        // llfio::byte_io_handle::const_buffer_type reqBuf({
-                        //     reinterpret_cast<const llfio::byte *>(ctx->writeBuffer),
-                        //     static_cast<size_t>(nr)
-                        // });
-                        //
-                        // llfio::file_handle::io_request<llfio::file_handle::const_buffers_type> req(
-                        //     llfio::file_handle::const_buffers_type{&reqBuf, 1},
-                        //     ctx->chunkOffset + ctx->bodyBytesRead
-                        // );
-                        //
-                        // auto result = ctx->pinnedHandle->write(req);
-                        //
-                        // if (!result) {
-                        //     spdlog::error("Could not write file to disk {}", result.error().message());
-                        //     lsquic_stream_close(stream);
-                        //     return;
-                        // }
-                        //
-                        // const auto nw = result.bytes_transferred();
+                        if (!ctx->pinnedHandle) {
+                            spdlog::error("No pinned file handle");
+                            lsquic_stream_close(stream);
+                            return;
+                        }
 
-                        // if (nw < nr) {
-                        //     spdlog::error("Unexpected partial write to disk; expected = {} written = {}", nr, nw);
-                        //     lsquic_stream_close(stream);
-                        //     return;
-                        // }
+                        llfio::byte_io_handle::const_buffer_type reqBuf({
+                            reinterpret_cast<const llfio::byte *>(ctx->writeBuffer),
+                            static_cast<size_t>(nr)
+                        });
 
-                        const auto nw = nr;
+                        llfio::file_handle::io_request<llfio::file_handle::const_buffers_type> req(
+                            llfio::file_handle::const_buffers_type{&reqBuf, 1},
+                            ctx->chunkOffset + ctx->bodyBytesRead
+                        );
+
+                        auto result = ctx->pinnedHandle->write(req);
+
+                        if (!result) {
+                            spdlog::error("Could not write file to disk {}", result.error().message());
+                            lsquic_stream_close(stream);
+                            return;
+                        }
+
+                        const auto nw = result.bytes_transferred();
+
+                        if (nw < nr) {
+                            spdlog::error("Unexpected partial write to disk; expected = {} written = {}", nr, nw);
+                            lsquic_stream_close(stream);
+                            return;
+                        }
 
                         connCtx->bytesMoved += nw;
 

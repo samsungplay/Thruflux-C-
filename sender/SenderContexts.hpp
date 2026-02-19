@@ -259,31 +259,30 @@ namespace sender {
                 }
 
 
-                // llfio::byte_io_handle::buffer_type reqBuf({
-                //     reinterpret_cast<llfio::byte *>(readBuf.data()),
-                //     len
-                // });
-                //
-                // const llfio::file_handle::io_request<llfio::file_handle::buffers_type> req(
-                //     llfio::file_handle::buffers_type{&reqBuf, 1},
-                //     offset
-                // );
-                //
-                // auto result = pinnedHandle->read(req);
-                //
-                // if (!result) {
-                //     spdlog::error("Failed to read file with fileId {}: {}", fileId, result.error().message());
-                //     return false;
-                // }
-                //
-                //
-                // const auto bytesRead = result.bytes_transferred();
-                // if (bytesRead < len) {
-                //     spdlog::error("Unexpected EOF on fileId {} at offset {}. Read {}/{} bytes",
-                //                   fileId, offset + bytesRead, bytesRead, len);
-                //     return false;s
-                // }
-                std::memset(readBuf.data(), 0xAB, len);
+                llfio::byte_io_handle::buffer_type reqBuf({
+                    reinterpret_cast<llfio::byte *>(readBuf.data()),
+                    len
+                });
+
+                const llfio::file_handle::io_request<llfio::file_handle::buffers_type> req(
+                    llfio::file_handle::buffers_type{&reqBuf, 1},
+                    offset
+                );
+
+                auto result = pinnedHandle->read(req);
+
+                if (!result) {
+                    spdlog::error("Failed to read file with fileId {}: {}", fileId, result.error().message());
+                    return false;
+                }
+
+
+                const auto bytesRead = result.bytes_transferred();
+                if (bytesRead < len) {
+                    spdlog::error("Unexpected EOF on fileId {} at offset {}. Read {}/{} bytes",
+                                  fileId, offset + bytesRead, bytesRead, len);
+                    return false;
+                }
 
                 memcpy(headerBuf, &offset, 8);
                 memcpy(headerBuf + 8, &len, 4);
