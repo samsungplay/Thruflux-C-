@@ -111,7 +111,7 @@ namespace common {
                 const auto *ctx = static_cast<ConnectionContext *>(
                     specs[i].conn_ctx ? specs[i].conn_ctx : specs[i].peer_ctx
                 );
-                if (!ctx) {
+                if (!ctx || !ctx->agent || ctx->dead) {
                     i++;
                     continue;
                 }
@@ -142,7 +142,7 @@ namespace common {
                 }
 
 
-                const int nSent = ctx->agent ? nice_agent_send_messages_nonblocking(
+                const int nSent = ctx->agent && !ctx->dead ? nice_agent_send_messages_nonblocking(
                     ctx->agent,
                     ctx->streamId,
                     1,

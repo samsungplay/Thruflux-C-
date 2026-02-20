@@ -201,12 +201,9 @@ namespace common {
         bool started = false;
         bool complete = false;
         lsquic_stream_t *manifestStream = nullptr;
-
-        indicators::ProgressBar *progressBar;
         uint64_t skippedBytes = 0;
-
         enum ConnectionType { DIRECT, RELAYED };
-
         ConnectionType connectionType = DIRECT;
+        bool dead = false;
     };
 }

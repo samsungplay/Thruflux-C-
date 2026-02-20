@@ -150,7 +150,8 @@ namespace sender {
                     }
                     std::erase(connectionContexts_, ctx);
                     ctx->connection = nullptr;
-                    delete ctx;
+
+                    ctx->softFree();
                 }
             },
 
