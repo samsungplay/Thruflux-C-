@@ -142,10 +142,12 @@ namespace common {
                 ++exp;
             }
 
+            char buf[32];
             if (exp == 0)
-                return std::format("{:.0f}{}", size, units[exp]);
-
-            return std::format("{:.2f}{}", size, units[exp]);
+                snprintf(buf, sizeof(buf), "%.0f%s", size, units[exp]);
+            else
+                snprintf(buf, sizeof(buf), "%.2f%s", size, units[exp]);
+            return std::string(buf);
         }
 
         static std::optional<StunServer> toStunServer(const std::string_view raw) {

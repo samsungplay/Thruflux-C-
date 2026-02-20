@@ -1,6 +1,4 @@
 #pragma once
-#include <blake3.h>
-
 #include "ReceiverConfig.hpp"
 #include "../common/Contexts.hpp"
 #ifdef _MSC_VER

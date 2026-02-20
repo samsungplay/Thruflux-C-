@@ -7,7 +7,7 @@ endif()
 
 
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -28,7 +28,6 @@ find_package(llfio CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(lsquic CONFIG REQUIRED)
 find_package(indicators CONFIG REQUIRED)
-find_package(blake3 CONFIG REQUIRED)
 find_package(MbedTLS CONFIG REQUIRED)
 pkg_check_modules(NICE REQUIRED IMPORTED_TARGET nice)
 
@@ -74,7 +73,6 @@ target_link_libraries(thru PRIVATE
         indicators::indicators
         ixwebsocket::ixwebsocket
         lsquic::lsquic
-        BLAKE3::blake3
         unofficial::uwebsockets::uwebsockets
         MbedTLS::mbedtls
         PkgConfig::NICE
