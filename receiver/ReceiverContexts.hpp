@@ -16,11 +16,9 @@ static int popcount32(unsigned int x) {
 #endif
 
 
-
 namespace receiver {
-
     inline static constexpr size_t STAGE_LIMIT = 16 * 1024 * 1024;
-    inline static constexpr size_t FLUSH_AT  =  8 * 1024 * 1024;
+    inline static constexpr size_t FLUSH_AT = 8 * 1024 * 1024;
 
     struct ReceiverConnectionContext : common::ConnectionContext {
         std::chrono::steady_clock::time_point lastResumeFlush{};
@@ -136,9 +134,10 @@ namespace receiver {
                     skippedBytes = resumedBytes;
                     filesMoved = resumeFileId;
 
-                    const auto resumePercent =  bytesMoved / static_cast<double>(totalExpectedBytes) * 100;
+                    const auto resumePercent = bytesMoved / static_cast<double>(totalExpectedBytes) * 100;
 
-                    spdlog::info("Automatically resuming from around {}%. Pass --overwrite flag to disable.", resumePercent);
+                    spdlog::info("Automatically resuming from around {}%. Pass --overwrite flag to disable.",
+                                 resumePercent);
                 }
             }
 
@@ -151,7 +150,7 @@ namespace receiver {
 
             const auto now = std::chrono::steady_clock::now();
             const bool timeOk = lastResumeFlush.time_since_epoch().count() == 0 ||
-                          std::chrono::duration<double>(now - lastResumeFlush).count() >= 1.0;
+                                std::chrono::duration<double>(now - lastResumeFlush).count() >= 1.0;
 
             if (!force && !timeOk) {
                 return;
@@ -180,53 +179,55 @@ namespace receiver {
     };
 
     struct ReceiverStreamContext {
-
         enum StreamType { UNKNOWN, MANIFEST, DATA } type = UNKNOWN;
 
         std::vector<uint8_t> stage;
         size_t stageLen = 0;
-        uint64_t stageBaseOff = 0;
 
         uint32_t curFileId = 0;
-        uint64_t curOff = 0;
         uint64_t curSize = 0;
         uint32_t pinnedFileId = UINT32_MAX;
         llfio::file_handle *pinnedHandle = nullptr;
         uint8_t writeBuffer[256 * 1024];
+        uint64_t flushOff = 0;
+        uint64_t recvOff = 0;
 
         ReceiverStreamContext() {
             stage.resize(STAGE_LIMIT);
         }
 
-        bool openFile(ReceiverConnectionContext *connCtx, uint32_t fileId) {
+        bool openFile(ReceiverConnectionContext *connCtx, uint32_t fileId, uint64_t startOff = 0) {
             if (fileId >= connCtx->fileSizes.size()) return false;
+
             curFileId = fileId;
             curSize = connCtx->fileSizes[fileId];
+
+            flushOff = startOff;
+            recvOff = startOff;
             stageLen = 0;
-            stageBaseOff = 0;
-            curOff = 0;
+
             if (pinnedFileId != fileId) {
                 if (pinnedFileId != UINT32_MAX) connCtx->cache.release(pinnedFileId);
                 pinnedFileId = fileId;
                 pinnedHandle = connCtx->cache.acquire(fileId, true);
                 if (!pinnedHandle) return false;
             }
-
             return true;
         }
 
-        bool flushStage(ReceiverConnectionContext* connCtx) {
+        bool flushStage(ReceiverConnectionContext *connCtx) {
             if (stageLen == 0) return true;
             if (!pinnedHandle) return false;
 
+
             llfio::byte_io_handle::const_buffer_type reqBuf({
-                reinterpret_cast<const llfio::byte*>(stage.data()),
+                reinterpret_cast<const llfio::byte *>(stage.data()),
                 stageLen
             });
 
             llfio::file_handle::io_request<llfio::file_handle::const_buffers_type> req(
                 llfio::file_handle::const_buffers_type{&reqBuf, 1},
-                stageBaseOff
+                flushOff
             );
 
             auto result = pinnedHandle->write(req);
@@ -236,14 +237,14 @@ namespace receiver {
             if (nw != stageLen) return false;
 
             connCtx->bytesMoved += nw;
-            curOff += nw;
+
+            flushOff += nw;
+            stageLen = 0;
 
             connCtx->resumeFileId = curFileId;
-            connCtx->resumeOffset = curOff;
+            connCtx->resumeOffset = flushOff;
             connCtx->resumeDirty = true;
 
-            stageLen = 0;
-            stageBaseOff = curOff;
             return true;
         }
     };

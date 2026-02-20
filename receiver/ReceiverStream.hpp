@@ -208,10 +208,10 @@ namespace receiver {
                                         ? ReceiverStreamContext::MANIFEST
                                         : ReceiverStreamContext::DATA;
                         if (ctx->type == ReceiverStreamContext::DATA && !connCtx->started) {
-                            ctx->openFile(connCtx, connCtx->resumeFileId);
-                            ctx->curOff = connCtx->resumeOffset;
-                            ctx->stageLen = 0;
-                            ctx->stageBaseOff = ctx->curOff;
+                            if (!ctx->openFile(connCtx, connCtx->resumeFileId, connCtx->resumeOffset)) {
+                                lsquic_stream_close(stream);
+                                return;
+                            }
 
                             connCtx->startTime = std::chrono::steady_clock::now();
                             connCtx->progressBar->set_option(
@@ -274,17 +274,10 @@ namespace receiver {
                         return;
                     }
 
-                    //inner loop to handle empty files
-                    while (true) {
-                        if (ctx->stageLen > 0) {
-                            if (!ctx->flushStage(connCtx)) {
-                                lsquic_stream_close(stream);
-                                return;
-                            }
-                        }
-
-                        if (ctx->curOff < ctx->curSize) {
-                            break;
+                    while (ctx->flushOff >= ctx->curSize) {
+                        if (!ctx->flushStage(connCtx)) {
+                            lsquic_stream_close(stream);
+                            return;
                         }
 
                         connCtx->filesMoved++;
@@ -298,19 +291,14 @@ namespace receiver {
                             return;
                         }
 
-                        if (!ctx->openFile(connCtx, ctx->curFileId)) {
+                        if (!ctx->openFile(connCtx, ctx->curFileId, 0)) {
                             lsquic_stream_close(stream);
                             return;
                         }
                     }
 
-                    if (ctx->stageLen == 0) {
-                        ctx->stageBaseOff = ctx->curOff;
-                    }
-
                     const size_t stageRoom = ctx->stage.size() - ctx->stageLen;
-
-                    if (ctx->stage.size() - ctx->stageLen == 0) {
+                    if (stageRoom == 0) {
                         if (!ctx->flushStage(connCtx)) {
                             lsquic_stream_close(stream);
                             return;
@@ -318,23 +306,23 @@ namespace receiver {
                         continue;
                     }
 
-                    const auto fileRemaining = std::max<uint64_t>(ctx->curSize - ctx->curOff, 0);
-                    const size_t maxRead = std::min<uint64_t>(stageRoom, fileRemaining);
-
-                    if (maxRead == 0) {
+                    const uint64_t remaining = (ctx->recvOff < ctx->curSize) ? (ctx->curSize - ctx->recvOff) : 0;
+                    if (remaining == 0) {
+                        if (!ctx->flushStage(connCtx)) {
+                            lsquic_stream_close(stream);
+                            return;
+                        }
                         continue;
                     }
 
+                    const size_t maxRead = std::min<uint64_t>(stageRoom, remaining);
                     const ssize_t nr = lsquic_stream_read(stream, ctx->stage.data() + ctx->stageLen, maxRead);
-
-                    if (nr <= 0) {
-                        break;
-                    }
+                    if (nr <= 0) break;
 
                     ctx->stageLen += nr;
+                    ctx->recvOff += nr;
 
-                    if (ctx->stageLen >= FLUSH_AT ||
-                        (ctx->stageBaseOff + ctx->stageLen) >= ctx->curSize) {
+                    if (ctx->stageLen >= FLUSH_AT || ctx->recvOff >= ctx->curSize) {
                         if (!ctx->flushStage(connCtx)) {
                             lsquic_stream_close(stream);
                             return;
