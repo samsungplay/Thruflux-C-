@@ -19,7 +19,7 @@ static int popcount32(unsigned int x) {
 
 namespace receiver {
 
-    inline static constexpr size_t STAGE_CAP = 16 * 1024 * 1024;
+    inline static constexpr size_t STAGE_LIMIT = 16 * 1024 * 1024;
     inline static constexpr size_t FLUSH_AT  =  8 * 1024 * 1024;
 
     struct ReceiverConnectionContext : common::ConnectionContext {
@@ -48,6 +48,7 @@ namespace receiver {
             indicators::option::PostfixText{" received 0B"},
             indicators::option::ForegroundColor{indicators::Color::white}
         };
+
         std::chrono::steady_clock::time_point lastManifestProgressPrint{};
 
         void createProgressBar(std::string prefix) {
@@ -107,23 +108,20 @@ namespace receiver {
                             in.read(reinterpret_cast<char *>(&fid), sizeof(fid));
                             in.read(reinterpret_cast<char *>(&off), sizeof(off));
 
-                            const bool ok =
-                                    in.good() &&
-                                    in.gcount() == static_cast<std::streamsize>(sizeof(off));
-
-                            if (ok && fid < fileSizes.size()) {
+                            if (in.good() && in.gcount() == sizeof(off) && fid < fileSizes.size()) {
                                 resumeFileId = fid;
-                                resumeOffset = std::min<uint64_t>(off, fileSizes[fid]);
+                                resumeOffset = std::min(off, fileSizes[fid]);
                             }
                         }
                     }
 
                     while (resumeFileId < fileSizes.size() && resumeOffset >= fileSizes[resumeFileId]) {
                         resumeOffset = 0;
-                        ++resumeFileId;
+                        resumeFileId++;
                     }
+
                     if (resumeFileId >= fileSizes.size()) {
-                        resumeFileId = static_cast<uint32_t>(fileSizes.size());
+                        resumeFileId = fileSizes.size();
                         resumeOffset = 0;
                     }
 
@@ -133,15 +131,16 @@ namespace receiver {
                     }
                     resumedBytes += resumeOffset;
 
-                    const int resumedFiles = resumeFileId;
-
                     bytesMoved = resumedBytes;
                     lastBytesMoved = resumedBytes;
                     skippedBytes = resumedBytes;
-                    filesMoved = resumedFiles;
+                    filesMoved = resumeFileId;
+
+                    const auto resumePercent =  bytesMoved / static_cast<double>(totalExpectedBytes) * 100;
+
+                    spdlog::info("Automatically resuming from around {}%. Pass --overwrite flag to disable.", resumePercent);
                 }
             }
-
 
             spdlog::info("Manifest unsealed: {} file(s) , Total size: {}", count,
                          common::Utils::sizeToReadableFormat(totalExpectedBytes));
@@ -150,10 +149,13 @@ namespace receiver {
         void maybeSaveResumeState(bool force = false) {
             if (!resumeDirty) return;
 
-            auto now = std::chrono::steady_clock::now();
-            bool timeOk = (lastResumeFlush.time_since_epoch().count() == 0) ||
-                          (std::chrono::duration<double>(now - lastResumeFlush).count() >= 1.0);
-            if (!force && !timeOk) return;
+            const auto now = std::chrono::steady_clock::now();
+            const bool timeOk = lastResumeFlush.time_since_epoch().count() == 0 ||
+                          std::chrono::duration<double>(now - lastResumeFlush).count() >= 1.0;
+
+            if (!force && !timeOk) {
+                return;
+            }
 
             const std::string tmp = resumeStatePath + ".tmp";
             std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
@@ -161,6 +163,7 @@ namespace receiver {
 
             out.write(reinterpret_cast<const char *>(&resumeFileId), sizeof(resumeFileId));
             out.write(reinterpret_cast<const char *>(&resumeOffset), sizeof(resumeOffset));
+
             out.flush();
 
             std::error_code ec;
@@ -177,12 +180,12 @@ namespace receiver {
     };
 
     struct ReceiverStreamContext {
+
         enum StreamType { UNKNOWN, MANIFEST, DATA } type = UNKNOWN;
 
         std::vector<uint8_t> stage;
         size_t stageLen = 0;
         uint64_t stageBaseOff = 0;
-
 
         uint32_t curFileId = 0;
         uint64_t curOff = 0;
@@ -192,7 +195,7 @@ namespace receiver {
         uint8_t writeBuffer[256 * 1024];
 
         ReceiverStreamContext() {
-            stage.resize(STAGE_CAP);
+            stage.resize(STAGE_LIMIT);
         }
 
         bool openFile(ReceiverConnectionContext *connCtx, uint32_t fileId) {
@@ -201,6 +204,7 @@ namespace receiver {
             curSize = connCtx->fileSizes[fileId];
             stageLen = 0;
             stageBaseOff = 0;
+            curOff = 0;
             if (pinnedFileId != fileId) {
                 if (pinnedFileId != UINT32_MAX) connCtx->cache.release(pinnedFileId);
                 pinnedFileId = fileId;
@@ -211,7 +215,7 @@ namespace receiver {
             return true;
         }
 
-        bool flushStage(receiver::ReceiverConnectionContext* connCtx) {
+        bool flushStage(ReceiverConnectionContext* connCtx) {
             if (stageLen == 0) return true;
             if (!pinnedHandle) return false;
 

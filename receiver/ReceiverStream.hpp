@@ -274,6 +274,7 @@ namespace receiver {
                         return;
                     }
 
+                    //inner loop to handle empty files
                     while (true) {
                         if (ctx->stageLen > 0) {
                             if (!ctx->flushStage(connCtx)) {
@@ -282,22 +283,14 @@ namespace receiver {
                             }
                         }
 
-                        if (ctx->curFileId >= connCtx->fileSizes.size()) {
-                            connCtx->complete = true;
-                            connCtx->pendingCompleteAck = true;
-                            lsquic_stream_wantwrite(connCtx->manifestStream, 1);
-                            lsquic_stream_wantread(stream, 0);
-                            return;
-                        }
-
                         if (ctx->curOff < ctx->curSize) {
                             break;
                         }
 
                         connCtx->filesMoved++;
+                        ctx->curFileId++;
 
-                        if (connCtx->filesMoved >= connCtx->totalExpectedFilesCount ||
-                            (ctx->curFileId + 1) >= connCtx->fileSizes.size()) {
+                        if (connCtx->filesMoved >= connCtx->totalExpectedFilesCount) {
                             connCtx->complete = true;
                             connCtx->pendingCompleteAck = true;
                             lsquic_stream_wantwrite(connCtx->manifestStream, 1);
@@ -305,14 +298,10 @@ namespace receiver {
                             return;
                         }
 
-                        ctx->curFileId++;
                         if (!ctx->openFile(connCtx, ctx->curFileId)) {
                             lsquic_stream_close(stream);
                             return;
                         }
-                        ctx->curOff = 0;
-                        ctx->stageLen = 0;
-                        ctx->stageBaseOff = 0;
                     }
 
                     if (ctx->stageLen == 0) {
@@ -320,7 +309,8 @@ namespace receiver {
                     }
 
                     const size_t stageRoom = ctx->stage.size() - ctx->stageLen;
-                    if (stageRoom == 0) {
+
+                    if (ctx->stage.size() - ctx->stageLen == 0) {
                         if (!ctx->flushStage(connCtx)) {
                             lsquic_stream_close(stream);
                             return;
@@ -328,19 +318,20 @@ namespace receiver {
                         continue;
                     }
 
-                    const uint64_t fileRemaining = (ctx->curSize > ctx->curOff) ? (ctx->curSize - ctx->curOff) : 0;
-                    const size_t maxRead = static_cast<size_t>(std::min<uint64_t>(stageRoom, fileRemaining));
+                    const auto fileRemaining = std::max<uint64_t>(ctx->curSize - ctx->curOff, 0);
+                    const size_t maxRead = std::min<uint64_t>(stageRoom, fileRemaining);
 
                     if (maxRead == 0) {
                         continue;
                     }
 
                     const ssize_t nr = lsquic_stream_read(stream, ctx->stage.data() + ctx->stageLen, maxRead);
+
                     if (nr <= 0) {
                         break;
                     }
 
-                    ctx->stageLen += static_cast<size_t>(nr);
+                    ctx->stageLen += nr;
 
                     if (ctx->stageLen >= FLUSH_AT ||
                         (ctx->stageBaseOff + ctx->stageLen) >= ctx->curSize) {

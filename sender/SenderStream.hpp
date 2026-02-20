@@ -210,7 +210,7 @@ namespace sender {
                         connCtx->resumeOffset = off;
 
                         if (connCtx->resumeFileId >= senderPersistentContext.files.size()) {
-                            connCtx->resumeFileId = 0;
+                            connCtx->resumeFileId = senderPersistentContext.files.size();
                             connCtx->resumeOffset = 0;
                         } else {
                             auto sz = senderPersistentContext.files[connCtx->resumeFileId].size;
