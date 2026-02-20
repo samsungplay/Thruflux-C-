@@ -126,7 +126,6 @@ namespace sender {
                             senderPersistentContext.receiversCount.fetch_sub(1);
                             auto &receiverId = quitTransferSessionPayload.receiverId;
                             SenderStream::disposeReceiverConnection(receiverId);
-                            common::IceHandler::dispose(receiverId);
                         });
                 } else if (type == "acknowledge_transfer_session_payload") {
                     const auto acknowledgeTransferSessionPayload = j.get<common::AcknowledgeTransferSessionPayload>();

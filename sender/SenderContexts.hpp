@@ -187,18 +187,6 @@ namespace sender {
         uint32_t resumeFileId = 0;
         uint64_t resumeOffset = 0;
 
-
-        void softFree() {
-            dead = true;
-            receiverId.clear();
-            ackBuf.clear();
-            ackBuf.shrink_to_fit();
-            agent = nullptr;
-            connection = nullptr;
-            manifestStream = nullptr;
-            localAddr = {};
-            remoteAddr = {};
-        }
     };
 
     struct SenderStreamContext {

@@ -204,6 +204,5 @@ namespace common {
         uint64_t skippedBytes = 0;
         enum ConnectionType { DIRECT, RELAYED };
         ConnectionType connectionType = DIRECT;
-        bool dead = false;
     };
 }

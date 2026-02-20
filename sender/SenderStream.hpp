@@ -151,7 +151,9 @@ namespace sender {
                     std::erase(connectionContexts_, ctx);
                     ctx->connection = nullptr;
 
-                    ctx->softFree();
+                    common::IceHandler::dispose(ctx->receiverId);
+
+                    delete ctx;
                 }
             },
 

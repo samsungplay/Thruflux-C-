@@ -85,13 +85,7 @@ namespace common {
         static void dispose(const std::string &receiverId) {
             if (const auto it = agentsMap_.find(receiverId); it != agentsMap_.end()) {
                 NiceAgent *agent = it->second.agent;
-                g_signal_handlers_disconnect_matched(
-                    agent, static_cast<GSignalMatchType>(G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA | G_SIGNAL_MATCH_ID),
-                    0, 0, nullptr, nullptr, nullptr);
-
-
-                nice_agent_remove_stream(agent, it->second.streamId);
-                g_object_unref(agent);
+                nice_agent_close_async(agent, nullptr, nullptr);
                 agentsMap_.erase(it);
             }
         }
