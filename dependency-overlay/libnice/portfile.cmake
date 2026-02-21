@@ -18,7 +18,7 @@ set(MESON_DEBUG_OPTS "")
 set(MESON_RELEASE_OPTS "")
 
 if(VCPKG_TARGET_IS_WINDOWS)
-  # MSVC/Windows-only flags
+  # MSVC/Windows-only flags.. without these libnice won't compile on windows. Quite annoying
   list(APPEND MESON_COMMON_OPTS
     "-Dc_args=['/DWIN32_LEAN_AND_MEAN','/Zc:preprocessor','/DNOCRYPT']"
     "-Dcpp_args=['/DWIN32_LEAN_AND_MEAN','/Zc:preprocessor','/DNOCRYPT']"
