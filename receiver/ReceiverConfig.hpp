@@ -18,9 +18,6 @@ namespace receiver {
 
         inline static std::int64_t quicConnWindowBytes = 256LL * 1024 * 1024;
         inline static std::int64_t quicStreamWindowBytes = 32LL * 1024 * 1024;
-        inline static int quicMaxStreams = 100;
-
-        inline static int totalStreams = 4;
 
         inline static bool overwrite = false;
 
@@ -97,21 +94,10 @@ namespace receiver {
                     ->check(CLI::Range(256 * KiB, 2 * GiB))
                     ->capture_default_str();
 
-            app->add_option("--quic-max-streams", quicMaxStreams,
-                           "Max QUIC streams allowed")
-                    ->check(CLI::Range(1, 100000))
-                    ->capture_default_str();
-
-            app->add_option("--total-streams", totalStreams,
-                           "Concurrent data streams to open. Increasing this does not necessarily accelerate transfers.")
-                    ->check(CLI::Range(1, 1024))
-                    ->capture_default_str();
-
-
             app->add_flag("--overwrite", overwrite, "Overwrite existing files (disable resume)");
 
             app->add_option("--udp-buffer-bytes", udpBufferBytes,
-                           "UDP socket buffer size (bytes)")
+                           "UDP socket buffer size (bytes). You must raise the max on your OS too. Default installer should have raised it to 16 MiB.")
                     ->check(CLI::Range(256 * 1024, 256 * 1024 * 1024))
                     ->capture_default_str();
 
@@ -121,11 +107,6 @@ namespace receiver {
                 if (quicConnWindowBytes < quicStreamWindowBytes) {
                     throw CLI::ValidationError("--quic-conn-window-bytes",
                                                "must be >= --quic-stream-window-bytes");
-                }
-
-                if (totalStreams > quicMaxStreams) {
-                    throw CLI::ValidationError("--total-streams",
-                                               "must be <= --quic-max-incoming-streams");
                 }
 
                 if (udpBufferBytes < 1024 * 1024) {

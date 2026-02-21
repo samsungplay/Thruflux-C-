@@ -86,7 +86,7 @@ namespace common {
 
         static void disableLibniceLogging() {
             g_log_set_handler("libnice",
-                              (GLogLevelFlags) ( G_LOG_LEVEL_WARNING),
+                              G_LOG_LEVEL_WARNING,
                               silenceLogs,
                               nullptr);
         }

@@ -20,9 +20,6 @@ namespace sender {
 
         inline static std::int64_t quicStreamWindowBytes = 32LL * 1024 * 1024;
         inline static std::int64_t quicConnWindowBytes = 256LL * 1024 * 1024;
-        inline static int quicMaxStreams = 100;
-
-        inline static int totalStreams = 4;
         inline static int udpBufferBytes = 8 * 1024 * 1024;
 
         static void initialize(CLI::App* app) {
@@ -97,29 +94,14 @@ namespace sender {
                     ->check(CLI::Range(1 * MiB, 8 * GiB))
                     ->capture_default_str();
 
-            app->add_option("--quic-max-streams", quicMaxStreams,
-                           "Max QUIC streams allowed")
-                    ->check(CLI::Range(1, 100000))
-                    ->capture_default_str();
 
-            app->add_option("--total-streams", totalStreams,
-                           "Concurrent data streams to open. Increasing this does not necessarily accelerate transfers.")
-                    ->check(CLI::Range(1, 1024))
-                    ->capture_default_str();
-
-            app->add_option("--udp-buffer-bytes", udpBufferBytes, "UDP socket buffer size (bytes)")
+            app->add_option("--udp-buffer-bytes", udpBufferBytes, "UDP socket buffer size (bytes). You must raise the max on your OS too. Default installer should have raised it to 16 MiB.")
                     ->check(CLI::Range(256 * 1024, 256 * 1024 * 1024))
                     ->capture_default_str();
 
             app->set_version_flag("--version", "Thruflux v0.3.0");
 
             app->parse_complete_callback([&]() {
-
-                if (totalStreams > quicMaxStreams) {
-                    throw CLI::ValidationError("--total-streams",
-                                               "must be <= --quic-max-streams (" + std::to_string(
-                                                   quicMaxStreams) + ")");
-                }
 
                 if (quicConnWindowBytes < quicStreamWindowBytes) {
                     throw CLI::ValidationError("--quic-conn-window-bytes",
