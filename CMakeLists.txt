@@ -17,8 +17,6 @@ if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++ -static-libgcc")
-
 
 find_package(CLI11 CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
