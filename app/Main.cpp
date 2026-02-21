@@ -2,25 +2,37 @@
 #include "../server/ServerEntryPoint.hpp"
 #include "../sender/SenderEntryPoint.hpp"
 #include "../receiver/ReceiverEntryPoint.hpp"
+#include <clocale>
+
+#ifdef _WIN32
+    #include <windows.h>
+    #define SET_ENV(name, value) _putenv_s(name, value)
+#else
+    #define SET_ENV(name, value) setenv(name, value, 1)
+#endif
 
 static void forceUtf8Locale() {
     if (std::setlocale(LC_ALL, "") != nullptr) return;
 
-    if (std::setlocale(LC_ALL, "C.UTF-8") != nullptr) {
-        setenv("LANG", "C.UTF-8", 1);
-        setenv("LC_ALL", "C.UTF-8", 1);
+#ifdef _WIN32
+    if (std::setlocale(LC_ALL, ".UTF-8") != nullptr) {
+        SET_ENV("LC_ALL", ".UTF-8");
         return;
     }
-    if (std::setlocale(LC_ALL, "en_US.UTF-8") != nullptr ||
-        std::setlocale(LC_ALL, "en_US.utf8") != nullptr) {
-        setenv("LANG", "en_US.UTF-8", 1);
-        setenv("LC_ALL", "en_US.UTF-8", 1);
+#else
+    if (std::setlocale(LC_ALL, "C.UTF-8") != nullptr) {
+        SET_ENV("LC_ALL", "C.UTF-8");
+        SET_ENV("LANG", "C.UTF-8");
         return;
-        }
-
+    }
+    if (std::setlocale(LC_ALL, "en_US.UTF-8") != nullptr) {
+        SET_ENV("LC_ALL", "en_US.UTF-8");
+        SET_ENV("LANG", "en_US.UTF-8");
+        return;
+    }
+#endif
     std::setlocale(LC_ALL, "C");
-    setenv("LANG", "C", 1);
-    setenv("LC_ALL", "C", 1);
+    SET_ENV("LC_ALL", "C");
 }
 
 int main(const int argc, char **argv) {
