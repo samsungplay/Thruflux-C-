@@ -85,10 +85,10 @@ namespace common {
         }
 
         static void disableLibniceLogging() {
-            // g_log_set_handler("libnice",
-            //                   (GLogLevelFlags) (G_LOG_LEVEL_CRITICAL | G_LOG_LEVEL_WARNING),
-            //                   silenceLogs,
-            //                   nullptr);
+            g_log_set_handler("libnice",
+                              (GLogLevelFlags) ( G_LOG_LEVEL_WARNING),
+                              silenceLogs,
+                              nullptr);
         }
 
         static uint64_t fnv1a64(const uint8_t *data, const size_t len) {
