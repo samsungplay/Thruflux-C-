@@ -1,6 +1,4 @@
 build
 out.bin
 random_file.bin
-build_windows
-buildSrc
 build_intel_mac
