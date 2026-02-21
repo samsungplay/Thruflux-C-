@@ -107,3 +107,4 @@ fi
 
 log "done"
 log "try: ${APP} --help"
+log "re-run this installer anytime to update."
