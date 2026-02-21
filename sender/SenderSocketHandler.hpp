@@ -55,7 +55,7 @@ namespace sender {
                 } else if (type == "created_transfer_session_payload") {
                     const auto createdTransferPayload = j.get<common::CreatedTransferSessionPayload>();
                     spdlog::info("Secure Join Code Generated : \033[1;36m{}\033[0m", createdTransferPayload.joinCode);
-                    spdlog::info("Run on receiver : /thru join {}", createdTransferPayload.joinCode);
+                    spdlog::info("Run on receiver : thru join {}", createdTransferPayload.joinCode);
                     common::ThreadManager::postTask([createdTransferPayload = std::move(createdTransferPayload)]() {
                         senderPersistentContext.joinCode = createdTransferPayload.joinCode;
                     });
